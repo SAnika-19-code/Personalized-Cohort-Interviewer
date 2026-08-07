@@ -25,6 +25,10 @@ import {
   generateClosingMessage,
 } from "@/lib/questionGenerator";
 import { evaluateAnswer, deriveStrengthsAndWeaknesses } from "@/lib/evaluator";
+import {
+  generateConversationalResponse,
+  formatConversationalResponse,
+} from "@/lib/interview/conversational";
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -155,6 +159,9 @@ export function createSession(
     skippedQuestions: [],
     hintsUsed: [],
     questionStartedAt: Date.now(),
+    consecutiveFollowUps: 0,
+    lastAcknowledgement: undefined,
+    lastRemark: undefined,
     isComplete: false,
     startedAt: Date.now(),
   };
@@ -333,20 +340,77 @@ export function processAnswer(
     return { session: updated, interviewerMessage: closing, isComplete: true };
   }
 
-  const shouldFollowUp =
-    evaluation.isPartial ||
-    evaluation.misconception ||
-    (!evaluation.isCorrect && session.currentTopic.questionsAsked < 3);
+  const coveredIds = [
+    ...session.topicCoverages.map((t) => t.topicId),
+    session.currentTopic.topicId,
+  ];
 
-  const shouldSwitchTopic =
-    evaluation.isCorrect &&
-    !evaluation.isPartial &&
-    session.currentTopic.questionsAsked >= 2;
+  const nextTopic = selectNextTopic(
+    session.curriculum,
+    session.candidateProfile,
+    coveredIds
+  );
+  const nextTopicTitle = nextTopic?.topicTitle;
+
+  const consecutiveFollowUps = session.consecutiveFollowUps ?? 0;
+  const lastAcknowledgement = session.lastAcknowledgement;
+  const lastRemark = session.lastRemark;
+
+  const convResponse = generateConversationalResponse(
+    candidateAnswer,
+    evaluation,
+    session.currentTopic.topicTitle,
+    nextTopicTitle,
+    consecutiveFollowUps,
+    lastAcknowledgement,
+    lastRemark
+  );
 
   let interviewerMessage: string;
   let nextObjectiveId = session.currentObjectiveId;
 
-  if (shouldFollowUp && session.currentTopic.questionsAsked < 4) {
+  if (convResponse.shouldSwitchTopic) {
+    updated.consecutiveFollowUps = 0;
+    if (nextTopic && !convResponse.isFollowUp) {
+      updated.topicCoverages = [...session.topicCoverages, updated.currentTopic];
+
+      if (!nextTopic || shouldEndInterview({ ...updated, questionNumber: updated.questionNumber + 1 })) {
+        updated.isComplete = true;
+        interviewerMessage = generateClosingMessage();
+        updated.conversationHistory = [
+          ...updated.conversationHistory,
+          createMessage("interviewer", interviewerMessage),
+        ];
+        return { session: updated, interviewerMessage, isComplete: true };
+      }
+
+      const topicInfo = getTopicById(session.curriculum, nextTopic.topicId);
+      const uncovered = topicInfo?.topic.learningObjectives.map((o) => o.id) ?? [];
+
+      const { question, objectiveId } = generateQuestion({
+        topicId: nextTopic.topicId,
+        curriculum: session.curriculum,
+        profile: session.candidateProfile,
+        difficulty: updated.difficulty,
+        conversationHistory: updated.conversationHistory,
+        questionNumber: session.questionNumber + 1,
+        uncoveredObjectives: uncovered,
+        isFollowUp: false,
+      });
+
+      interviewerMessage = formatConversationalResponse({
+        ...convResponse,
+        question,
+      });
+      nextObjectiveId = objectiveId;
+      updated.currentTopic = { ...nextTopic, questionsAsked: 1 };
+      updated.questionNumber = session.questionNumber + 1;
+    } else {
+      interviewerMessage = formatConversationalResponse(convResponse);
+      updated.questionNumber = session.questionNumber + 1;
+    }
+  } else {
+    updated.consecutiveFollowUps = consecutiveFollowUps + 1;
     const uncovered = (topic?.learningObjectives ?? [])
       .map((o) => o.id)
       .filter((id) => !updated.coveredObjectives.includes(id));
@@ -361,86 +425,20 @@ export function processAnswer(
       questionNumber: session.questionNumber + 1,
       uncoveredObjectives: uncovered,
       isFollowUp: true,
+      candidateAnswer,
     });
 
-    interviewerMessage = question;
-    nextObjectiveId = objectiveId;
-    updated.questionNumber = session.questionNumber + 1;
-    updated.currentTopic.questionsAsked += 1;
-  } else if (shouldSwitchTopic || session.currentTopic.questionsAsked >= 3) {
-    updated.topicCoverages = [
-      ...session.topicCoverages,
-      updated.currentTopic,
-    ];
-
-    const coveredIds = [
-      ...session.topicCoverages.map((t) => t.topicId),
-      updated.currentTopic.topicId,
-    ];
-
-    const nextTopic = selectNextTopic(
-      session.curriculum,
-      session.candidateProfile,
-      coveredIds
-    );
-
-    if (!nextTopic || shouldEndInterview({ ...updated, questionNumber: updated.questionNumber + 1 })) {
-      updated.isComplete = true;
-      interviewerMessage = generateClosingMessage();
-      updated.conversationHistory = [
-        ...updated.conversationHistory,
-        createMessage("interviewer", interviewerMessage),
-      ];
-      return { session: updated, interviewerMessage, isComplete: true };
-    }
-
-    const transition = generateTransitionMessage(
-      session.currentTopic.topicTitle,
-      nextTopic.topicTitle,
-      nextTopic.day
-    );
-
-    const topicInfo = getTopicById(session.curriculum, nextTopic.topicId);
-    const uncovered =
-      topicInfo?.topic.learningObjectives.map((o) => o.id) ?? [];
-
-    const { question, objectiveId } = generateQuestion({
-      topicId: nextTopic.topicId,
-      curriculum: session.curriculum,
-      profile: session.candidateProfile,
-      difficulty: updated.difficulty,
-      conversationHistory: updated.conversationHistory,
-      questionNumber: session.questionNumber + 1,
-      uncoveredObjectives: uncovered,
-      isFollowUp: false,
+    interviewerMessage = formatConversationalResponse({
+      ...convResponse,
+      question,
     });
-
-    interviewerMessage = `${transition}\n\n${question}`;
-    nextObjectiveId = objectiveId;
-    updated.currentTopic = { ...nextTopic, questionsAsked: 1 };
-    updated.questionNumber = session.questionNumber + 1;
-  } else {
-    const uncovered = (topic?.learningObjectives ?? [])
-      .map((o) => o.id)
-      .filter((id) => !updated.coveredObjectives.includes(id));
-
-    const { question, objectiveId } = generateQuestion({
-      topicId: session.currentTopic.topicId,
-      curriculum: session.curriculum,
-      profile: session.candidateProfile,
-      difficulty: updated.difficulty,
-      conversationHistory: updated.conversationHistory,
-      lastEvaluation: evaluation,
-      questionNumber: session.questionNumber + 1,
-      uncoveredObjectives: uncovered,
-      isFollowUp: false,
-    });
-
-    interviewerMessage = question;
     nextObjectiveId = objectiveId;
     updated.questionNumber = session.questionNumber + 1;
     updated.currentTopic.questionsAsked += 1;
   }
+
+  updated.lastAcknowledgement = convResponse.acknowledgement;
+  updated.lastRemark = convResponse.remark;
 
   const nextQuestionId = generateId();
   updated.currentQuestionId = nextQuestionId;
@@ -572,8 +570,42 @@ export function skipQuestion(session: InterviewSession): {
     nextTopic.topicTitle,
     nextTopic.day
   );
+
+  const convResponse = generateConversationalResponse(
+    "[Skipped question]",
+    {
+      conceptAccuracy: 50,
+      completeness: 50,
+      depth: 50,
+      reasoning: 50,
+      communication: 50,
+      confidence: 50,
+      overall: 50,
+      codeQuality: 60,
+      scoreBreakdown: {
+        technicalAccuracy: 50,
+        communicationClarity: 50,
+        completeness: 50,
+        problemSolving: 50,
+        codeQuality: 60,
+      },
+      feedback: "Question skipped.",
+      isCorrect: true,
+      isPartial: false,
+      objectivesAssessed: ["general"],
+    },
+    session.currentTopic.topicTitle,
+    nextTopic.topicTitle,
+    0,
+    undefined,
+    undefined
+  );
+
   const questionId = generateId();
-  const interviewerMessage = `${transition}\n\n${question}`;
+  const interviewerMessage = formatConversationalResponse({
+    ...convResponse,
+    question: `${transition}\n\n${question}`,
+  });
 
   updated.currentTopic = { ...nextTopic, questionsAsked: 1 };
   updated.questionNumber = session.questionNumber + 1;
@@ -581,6 +613,9 @@ export function skipQuestion(session: InterviewSession): {
   updated.currentQuestion = interviewerMessage;
   updated.currentObjectiveId = objectiveId;
   updated.questionStartedAt = Date.now();
+  updated.lastAcknowledgement = convResponse.acknowledgement;
+  updated.lastRemark = convResponse.remark;
+  updated.consecutiveFollowUps = 0;
   updated.conversationHistory = [
     ...session.conversationHistory,
     createMessage("candidate", "[Skipped question]", {

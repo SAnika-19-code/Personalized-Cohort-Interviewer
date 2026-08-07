@@ -154,6 +154,9 @@ export interface InterviewSession {
   skippedQuestions: QuestionReview[];
   hintsUsed: string[];
   questionStartedAt: number;
+  consecutiveFollowUps: number;
+  lastAcknowledgement?: string;
+  lastRemark?: string;
   isComplete: boolean;
   startedAt: number;
 }
