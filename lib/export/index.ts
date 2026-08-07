@@ -6,8 +6,19 @@ export function generateMarkdownReport(report: InterviewReport): string {
   let md = `# Interview Report\n\n`;
   md += `**Candidate:** ${name}\n`;
   md += `**Date:** ${report.date}\n\n`;
+  md += `**Selected Difficulty:** ${report.selectedDifficulty}\n`;
+  md += `**Interview Timestamp:** ${report.interviewTimestamp}\n\n`;
   md += `## Overall Score\n\n`;
   md += `**${report.overallScore}/100**\n\n`;
+
+  md += `## Score Breakdown\n\n`;
+  md += `| Category | Score |\n`;
+  md += `|----------|-------|\n`;
+  md += `| Technical Accuracy | ${report.scoreBreakdown.technicalAccuracy}/100 |\n`;
+  md += `| Communication Clarity | ${report.scoreBreakdown.communicationClarity}/100 |\n`;
+  md += `| Completeness | ${report.scoreBreakdown.completeness}/100 |\n`;
+  md += `| Problem Solving | ${report.scoreBreakdown.problemSolving}/100 |\n`;
+  md += `| Code Quality | ${report.scoreBreakdown.codeQuality}/100 |\n\n`;
 
   md += `## Strengths\n\n`;
   for (const s of report.strengths) {
@@ -46,10 +57,50 @@ export function generateMarkdownReport(report: InterviewReport): string {
     md += `\n`;
   }
 
+  md += `## Questions and Model Answers\n\n`;
+  for (const review of report.questionReviews) {
+    md += `### ${review.skipped ? "Skipped: " : ""}${review.topic}\n\n`;
+    md += `**Question**\n\n${review.question}\n\n`;
+    md += `**Candidate Answer**\n\n${review.candidateAnswer || "_Skipped_"}\n\n`;
+    md += `**Model Answer**\n\n${review.modelAnswer}\n\n`;
+    md += `**Feedback**\n\n${review.feedback}\n\n`;
+  }
+
   md += `## Communication Feedback\n\n`;
   md += `${report.communicationFeedback}\n`;
 
   return md;
+}
+
+export function downloadJSONReport(report: InterviewReport): void {
+  const blob = new Blob([JSON.stringify(report, null, 2)], {
+    type: "application/json",
+  });
+  downloadBlob(
+    blob,
+    `interview-report-${report.candidateId}-${report.date}.json`
+  );
+}
+
+export function downloadMarkdownReport(report: InterviewReport): void {
+  const blob = new Blob([generateMarkdownReport(report)], {
+    type: "text/markdown;charset=utf-8",
+  });
+  downloadBlob(
+    blob,
+    `interview-report-${report.candidateId}-${report.date}.md`
+  );
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 export async function generatePDFReport(report: InterviewReport): Promise<void> {
@@ -80,9 +131,13 @@ export async function generatePDFReport(report: InterviewReport): Promise<void> 
   y += 5;
   addText(`Candidate: ${name}`);
   addText(`Date: ${report.date}`);
+  addText(`Selected Difficulty: ${report.selectedDifficulty}`);
   y += 5;
 
   addText(`Overall Score: ${report.overallScore}/100`, 14, true);
+  addText(
+    `Scores: Technical Accuracy ${report.scoreBreakdown.technicalAccuracy}, Communication ${report.scoreBreakdown.communicationClarity}, Completeness ${report.scoreBreakdown.completeness}, Problem Solving ${report.scoreBreakdown.problemSolving}, Code Quality ${report.scoreBreakdown.codeQuality}`
+  );
   y += 5;
 
   addText("Strengths", 13, true);

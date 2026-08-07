@@ -70,6 +70,7 @@ export interface CandidateProfile {
 }
 
 export type DifficultyLevel = 1 | 2 | 3 | 4 | 5;
+export type InterviewStyle = "easy" | "medium" | "hard";
 
 export type MessageRole = "interviewer" | "candidate";
 
@@ -78,6 +79,16 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   timestamp: number;
+  questionId?: string;
+  kind?: "question" | "hint" | "system" | "answer";
+}
+
+export interface ScoreBreakdown {
+  technicalAccuracy: number;
+  communicationClarity: number;
+  completeness: number;
+  problemSolving: number;
+  codeQuality: number;
 }
 
 export interface EvaluationResult {
@@ -87,12 +98,26 @@ export interface EvaluationResult {
   reasoning: number;
   communication: number;
   confidence: number;
+  codeQuality: number;
   overall: number;
+  scoreBreakdown: ScoreBreakdown;
   feedback: string;
   isCorrect: boolean;
   isPartial: boolean;
   misconception?: string;
   objectivesAssessed: string[];
+}
+
+export interface QuestionReview {
+  questionId: string;
+  question: string;
+  candidateAnswer: string;
+  modelAnswer: string;
+  feedback: string;
+  topic: string;
+  day: string;
+  skipped?: boolean;
+  evaluation?: EvaluationResult;
 }
 
 export interface TopicCoverage {
@@ -120,6 +145,15 @@ export interface InterviewSession {
   topicCoverages: TopicCoverage[];
   score: number;
   evaluations: EvaluationResult[];
+  questionReviews: QuestionReview[];
+  currentQuestionId: string;
+  currentQuestion: string;
+  currentObjectiveId: string;
+  selectedDifficulty: InterviewStyle;
+  skipTokensRemaining: number;
+  skippedQuestions: QuestionReview[];
+  hintsUsed: string[];
+  questionStartedAt: number;
   isComplete: boolean;
   startedAt: number;
 }
@@ -128,7 +162,10 @@ export interface InterviewReport {
   candidateId: string;
   candidateName?: string;
   date: string;
+  interviewTimestamp: string;
+  selectedDifficulty: InterviewStyle;
   overallScore: number;
+  scoreBreakdown: ScoreBreakdown;
   strengths: string[];
   weaknesses: string[];
   topicBreakdown: {
@@ -141,12 +178,15 @@ export interface InterviewReport {
   recommendations: string[];
   nextTopicsToReview: string[];
   communicationFeedback: string;
+  questionReviews: QuestionReview[];
+  skippedQuestions: QuestionReview[];
   conversationHistory: ChatMessage[];
 }
 
 export interface StartInterviewRequest {
   candidateProfile: CandidateProfile;
   curriculum: Curriculum;
+  selectedDifficulty?: InterviewStyle;
 }
 
 export interface StartInterviewResponse {
@@ -156,7 +196,8 @@ export interface StartInterviewResponse {
 
 export interface NextInterviewRequest {
   session: InterviewSession;
-  candidateAnswer: string;
+  candidateAnswer?: string;
+  skipCurrent?: boolean;
 }
 
 export interface NextInterviewResponse {
@@ -171,6 +212,15 @@ export interface EndInterviewRequest {
 
 export interface EndInterviewResponse {
   report: InterviewReport;
+}
+
+export interface HintRequest {
+  session: InterviewSession;
+}
+
+export interface HintResponse {
+  hint: string;
+  updatedSession: InterviewSession;
 }
 
 export type AppScreen = "setup" | "interview" | "wrapup";

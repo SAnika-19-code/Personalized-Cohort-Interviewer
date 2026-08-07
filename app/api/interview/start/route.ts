@@ -15,7 +15,8 @@ export async function POST(request: NextRequest) {
 
     const { session, firstQuestion } = startInterview(
       body.candidateProfile,
-      body.curriculum
+      body.curriculum,
+      body.selectedDifficulty ?? "medium"
     );
 
     return NextResponse.json({ session, firstQuestion });

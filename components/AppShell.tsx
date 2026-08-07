@@ -6,7 +6,7 @@ import { SetupScreen } from "@/components/SetupScreen";
 import { InterviewScreen } from "@/components/InterviewScreen";
 import { WrapUpScreen } from "@/components/report/WrapUpScreen";
 import { useInterviewStore } from "@/hooks/useInterviewStore";
-import type { Curriculum, CandidateProfile } from "@/types";
+import type { Curriculum, CandidateProfile, InterviewStyle } from "@/types";
 
 export function AppShell() {
   const {
@@ -24,14 +24,22 @@ export function AppShell() {
   } = useInterviewStore();
 
   const handleStart = useCallback(
-    async (curriculum: Curriculum, profile: CandidateProfile) => {
+    async (
+      curriculum: Curriculum,
+      profile: CandidateProfile,
+      selectedDifficulty: InterviewStyle
+    ) => {
       setLoading(true);
       setError(null);
       try {
         const res = await fetch("/api/interview/start", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ candidateProfile: profile, curriculum }),
+          body: JSON.stringify({
+            candidateProfile: profile,
+            curriculum,
+            selectedDifficulty,
+          }),
         });
 
         if (!res.ok) {
@@ -78,6 +86,55 @@ export function AppShell() {
     },
     [session, setReport, setScreen, setLoading, setError]
   );
+
+  const handleHint = useCallback(async () => {
+    if (!session) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/interview/hint", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to generate hint");
+      }
+      const data = await res.json();
+      setSession(data.updatedSession);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  }, [session, setSession, setLoading, setError]);
+
+  const handleSkipQuestion = useCallback(async () => {
+    if (!session || session.skipTokensRemaining <= 0) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/interview/next", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session, skipCurrent: true }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error ?? "Failed to skip question");
+      }
+      const data = await res.json();
+      setSession(data.updatedSession);
+      if (data.isComplete) {
+        await handleEndInterview(data.updatedSession);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  }, [session, setSession, setLoading, setError, handleEndInterview]);
 
   const handleSubmitAnswer = useCallback(
     async (answer: string) => {
@@ -157,6 +214,8 @@ export function AppShell() {
               isLoading={isLoading}
               onSubmitAnswer={handleSubmitAnswer}
               onEndInterview={() => handleEndInterview()}
+              onHint={handleHint}
+              onSkipQuestion={handleSkipQuestion}
             />
           </motion.div>
         )}

@@ -1,6 +1,7 @@
 "use client";
 
-import { Square } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { HelpCircle, SkipForward, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ChatTimeline } from "@/components/chat/ChatTimeline";
@@ -13,6 +14,16 @@ interface InterviewScreenProps {
   isLoading: boolean;
   onSubmitAnswer: (answer: string) => void;
   onEndInterview: () => void;
+  onHint: () => void;
+  onSkipQuestion: () => void;
+}
+
+const QUESTION_SECONDS = 120;
+
+function formatTime(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 export function InterviewScreen({
@@ -20,10 +31,43 @@ export function InterviewScreen({
   isLoading,
   onSubmitAnswer,
   onEndInterview,
+  onHint,
+  onSkipQuestion,
 }: InterviewScreenProps) {
+  const [secondsLeft, setSecondsLeft] = useState(QUESTION_SECONDS);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [timeExpired, setTimeExpired] = useState(false);
+  const hintUsed = session.hintsUsed.includes(session.currentQuestionId);
   const progressPercent = Math.round(
     (session.questionNumber / session.totalQuestions) * 100
   );
+  const timerPercent = (secondsLeft / QUESTION_SECONDS) * 100;
+
+  useEffect(() => {
+    setSecondsLeft(QUESTION_SECONDS);
+    setTimeExpired(false);
+  }, [session.currentQuestionId]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setElapsedSeconds(Math.max(0, Math.floor((Date.now() - session.startedAt) / 1000)));
+      setSecondsLeft((current) => {
+        if (current <= 1) {
+          setTimeExpired(true);
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [session.startedAt, session.currentQuestionId]);
+
+  const timerClass = useMemo(() => {
+    if (secondsLeft <= 15) return "text-error";
+    if (secondsLeft <= 45) return "text-warning";
+    return "text-accent";
+  }, [secondsLeft]);
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -46,24 +90,72 @@ export function InterviewScreen({
               <div>
                 <span className="text-slate-400">Difficulty: </span>
                 <span className="font-medium text-accent">
+                  {session.selectedDifficulty.toUpperCase()} ·{" "}
                   {getDifficultyLabel(session.difficulty)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Question Timer: </span>
+                <span className={`font-semibold tabular-nums ${timerClass}`}>
+                  {formatTime(secondsLeft)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Total: </span>
+                <span className="font-medium text-white">
+                  {formatTime(elapsedSeconds)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400">Skip Tokens: </span>
+                <span className="font-medium text-white">
+                  {session.skipTokensRemaining}
                 </span>
               </div>
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onEndInterview}
-              disabled={isLoading}
-              className="gap-2 shrink-0"
-            >
-              <Square className="h-3 w-3 fill-current" />
-              End & Evaluate
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onHint}
+                disabled={isLoading || hintUsed}
+                className="shrink-0"
+              >
+                <HelpCircle className="h-4 w-4" />
+                Hint
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onSkipQuestion}
+                disabled={isLoading || session.skipTokensRemaining <= 0}
+                className="shrink-0"
+              >
+                <SkipForward className="h-4 w-4" />
+                Skip Question
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onEndInterview}
+                disabled={isLoading}
+                className="shrink-0"
+              >
+                <Square className="h-3 w-3 fill-current" />
+                End & Evaluate
+              </Button>
+            </div>
           </div>
 
           <Progress value={progressPercent} className="h-1.5" />
+          <Progress value={timerPercent} className="h-1" />
+          {timeExpired && (
+            <p className="text-xs text-warning">
+              Time is up for this question. You can continue answering when
+              ready.
+            </p>
+          )}
         </div>
       </header>
 

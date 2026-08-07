@@ -5,6 +5,10 @@ import type {
   CandidateProfile,
   Curriculum,
   EvaluationResult,
+  InterviewStyle,
+  QuestionReview,
+  ScoreBreakdown,
+  DifficultyLevel,
 } from "@/types";
 import {
   selectNextTopic,
@@ -26,13 +30,101 @@ function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
-  return { id: generateId(), role, content, timestamp: Date.now() };
+function createMessage(
+  role: ChatMessage["role"],
+  content: string,
+  options: Pick<ChatMessage, "questionId" | "kind"> = {}
+): ChatMessage {
+  return { id: generateId(), role, content, timestamp: Date.now(), ...options };
+}
+
+function styleToDifficulty(
+  style: InterviewStyle,
+  profile: CandidateProfile
+): DifficultyLevel {
+  if (style === "easy") return 2;
+  if (style === "hard") return 4;
+  return getInitialDifficulty(profile);
+}
+
+function averageBreakdown(evaluations: EvaluationResult[]): ScoreBreakdown {
+  const count = Math.max(evaluations.length, 1);
+  const totals = evaluations.reduce<ScoreBreakdown>(
+    (acc, evaluation) => ({
+      technicalAccuracy:
+        acc.technicalAccuracy + evaluation.scoreBreakdown.technicalAccuracy,
+      communicationClarity:
+        acc.communicationClarity + evaluation.scoreBreakdown.communicationClarity,
+      completeness: acc.completeness + evaluation.scoreBreakdown.completeness,
+      problemSolving: acc.problemSolving + evaluation.scoreBreakdown.problemSolving,
+      codeQuality: acc.codeQuality + evaluation.scoreBreakdown.codeQuality,
+    }),
+    {
+      technicalAccuracy: 0,
+      communicationClarity: 0,
+      completeness: 0,
+      problemSolving: 0,
+      codeQuality: 0,
+    }
+  );
+
+  return {
+    technicalAccuracy: Math.round(totals.technicalAccuracy / count),
+    communicationClarity: Math.round(totals.communicationClarity / count),
+    completeness: Math.round(totals.completeness / count),
+    problemSolving: Math.round(totals.problemSolving / count),
+    codeQuality: Math.round(totals.codeQuality / count),
+  };
+}
+
+function difficultyInstruction(style: InterviewStyle): string {
+  if (style === "easy") {
+    return "Use a friendly mentor tone, focus on concepts, and keep follow-ups approachable.";
+  }
+  if (style === "hard") {
+    return "Use a senior technical director lens, probe architecture, edge cases, trade-offs, and production risk.";
+  }
+  return "Use a balanced technical interviewer style with practical and conceptual coverage.";
+}
+
+function generateModelAnswer(
+  curriculum: Curriculum,
+  topicId: string,
+  objectiveId: string,
+  candidateAnswer: string
+): string {
+  const topicData = getTopicById(curriculum, topicId);
+  const objective =
+    topicData?.topic.learningObjectives.find((o) => o.id === objectiveId) ??
+    topicData?.topic.learningObjectives[0];
+  const title = topicData?.topic.title ?? "the topic";
+  const tools = topicData?.topic.tools?.slice(0, 3).join(", ");
+  const keywords = objective?.keywords?.slice(0, 5) ?? [];
+  const missed = keywords.filter(
+    (keyword) => !candidateAnswer.toLowerCase().includes(keyword.toLowerCase())
+  );
+  const codeExample =
+    /api|python|javascript|typescript|sql|json|fastapi|react|database|script/i.test(
+      `${title} ${objective?.description ?? ""}`
+    )
+      ? "\n\n```ts\nfunction validateInput(value: unknown) {\n  if (value == null) throw new Error(\"Input is required\");\n  return value;\n}\n```\n"
+      : "";
+
+  return `An ideal response would explain **${title}** through the objective: ${
+    objective?.description ?? "the relevant curriculum objective"
+  }. It should connect the concept to a practical workflow${
+    tools ? ` using ${tools}` : ""
+  }, name the main trade-offs, and describe how you would verify the approach.${codeExample}${
+    missed.length
+      ? `Important concepts to include: ${missed.join(", ")}.`
+      : "The answer should be specific, structured, and backed by an example."
+  }`;
 }
 
 export function createSession(
   candidateProfile: CandidateProfile,
-  curriculum: Curriculum
+  curriculum: Curriculum,
+  selectedDifficulty: InterviewStyle = "medium"
 ): InterviewSession {
   const firstTopic = selectNextTopic(curriculum, candidateProfile, []);
   if (!firstTopic) {
@@ -46,7 +138,7 @@ export function createSession(
     currentTopic: firstTopic,
     questionNumber: 0,
     totalQuestions: calculateTotalQuestions(curriculum),
-    difficulty: getInitialDifficulty(candidateProfile),
+    difficulty: styleToDifficulty(selectedDifficulty, candidateProfile),
     strengths: [],
     weaknesses: [],
     conversationHistory: [],
@@ -54,6 +146,15 @@ export function createSession(
     topicCoverages: [],
     score: 0,
     evaluations: [],
+    questionReviews: [],
+    currentQuestionId: "",
+    currentQuestion: "",
+    currentObjectiveId: "",
+    selectedDifficulty,
+    skipTokensRemaining: 2,
+    skippedQuestions: [],
+    hintsUsed: [],
+    questionStartedAt: Date.now(),
     isComplete: false,
     startedAt: Date.now(),
   };
@@ -61,9 +162,10 @@ export function createSession(
 
 export function startInterview(
   candidateProfile: CandidateProfile,
-  curriculum: Curriculum
+  curriculum: Curriculum,
+  selectedDifficulty: InterviewStyle = "medium"
 ): { session: InterviewSession; messages: ChatMessage[]; firstQuestion: string } {
-  const session = createSession(candidateProfile, curriculum);
+  const session = createSession(candidateProfile, curriculum, selectedDifficulty);
 
   const opening = generateOpeningMessage(
     candidateProfile,
@@ -76,7 +178,7 @@ export function startInterview(
   const uncoveredObjectives =
     topicData?.topic.learningObjectives.map((o) => o.id) ?? [];
 
-  const { question } = generateQuestion({
+  const { question, objectiveId } = generateQuestion({
     topicId: session.currentTopic.topicId,
     curriculum,
     profile: candidateProfile,
@@ -86,15 +188,22 @@ export function startInterview(
     uncoveredObjectives,
     isFollowUp: false,
   });
+  const questionId = generateId();
 
   const messages = [
-    createMessage("interviewer", opening),
-    createMessage("interviewer", question),
+    createMessage("interviewer", `${opening}\n\n${difficultyInstruction(selectedDifficulty)}`, {
+      kind: "system",
+    }),
+    createMessage("interviewer", question, { questionId, kind: "question" }),
   ];
 
   session.conversationHistory = messages;
   session.questionNumber = 1;
   session.currentTopic.questionsAsked = 1;
+  session.currentQuestionId = questionId;
+  session.currentQuestion = question;
+  session.currentObjectiveId = objectiveId;
+  session.questionStartedAt = Date.now();
 
   return { session, messages, firstQuestion: question };
 }
@@ -145,6 +254,14 @@ export function processAnswer(
       communication: 50,
       confidence: 50,
       overall: 50,
+      codeQuality: 60,
+      scoreBreakdown: {
+        technicalAccuracy: 50,
+        communicationClarity: 50,
+        completeness: 50,
+        problemSolving: 50,
+        codeQuality: 60,
+      },
       feedback: "General response evaluated.",
       isCorrect: true,
       isPartial: false,
@@ -153,6 +270,24 @@ export function processAnswer(
   }
 
   updated.evaluations = [...session.evaluations, evaluation];
+  updated.questionReviews = [
+    ...session.questionReviews,
+    {
+      questionId: session.currentQuestionId,
+      question: session.currentQuestion,
+      candidateAnswer,
+      modelAnswer: generateModelAnswer(
+        session.curriculum,
+        session.currentTopic.topicId,
+        evaluation.objectivesAssessed[0] ?? session.currentObjectiveId,
+        candidateAnswer
+      ),
+      feedback: evaluation.feedback,
+      topic: session.currentTopic.topicTitle,
+      day: session.currentTopic.dayTitle,
+      evaluation,
+    },
+  ];
   updated.coveredObjectives = [
     ...new Set([...session.coveredObjectives, ...evaluation.objectivesAssessed]),
   ];
@@ -193,7 +328,7 @@ export function processAnswer(
     const closing = generateClosingMessage();
     updated.conversationHistory = [
       ...updated.conversationHistory,
-      createMessage("interviewer", closing),
+      createMessage("interviewer", closing, { kind: "system" }),
     ];
     return { session: updated, interviewerMessage: closing, isComplete: true };
   }
@@ -209,13 +344,14 @@ export function processAnswer(
     session.currentTopic.questionsAsked >= 2;
 
   let interviewerMessage: string;
+  let nextObjectiveId = session.currentObjectiveId;
 
   if (shouldFollowUp && session.currentTopic.questionsAsked < 4) {
     const uncovered = (topic?.learningObjectives ?? [])
       .map((o) => o.id)
       .filter((id) => !updated.coveredObjectives.includes(id));
 
-    const { question } = generateQuestion({
+    const { question, objectiveId } = generateQuestion({
       topicId: session.currentTopic.topicId,
       curriculum: session.curriculum,
       profile: session.candidateProfile,
@@ -228,6 +364,7 @@ export function processAnswer(
     });
 
     interviewerMessage = question;
+    nextObjectiveId = objectiveId;
     updated.questionNumber = session.questionNumber + 1;
     updated.currentTopic.questionsAsked += 1;
   } else if (shouldSwitchTopic || session.currentTopic.questionsAsked >= 3) {
@@ -267,7 +404,7 @@ export function processAnswer(
     const uncovered =
       topicInfo?.topic.learningObjectives.map((o) => o.id) ?? [];
 
-    const { question } = generateQuestion({
+    const { question, objectiveId } = generateQuestion({
       topicId: nextTopic.topicId,
       curriculum: session.curriculum,
       profile: session.candidateProfile,
@@ -279,6 +416,7 @@ export function processAnswer(
     });
 
     interviewerMessage = `${transition}\n\n${question}`;
+    nextObjectiveId = objectiveId;
     updated.currentTopic = { ...nextTopic, questionsAsked: 1 };
     updated.questionNumber = session.questionNumber + 1;
   } else {
@@ -286,7 +424,7 @@ export function processAnswer(
       .map((o) => o.id)
       .filter((id) => !updated.coveredObjectives.includes(id));
 
-    const { question } = generateQuestion({
+    const { question, objectiveId } = generateQuestion({
       topicId: session.currentTopic.topicId,
       curriculum: session.curriculum,
       profile: session.candidateProfile,
@@ -299,13 +437,160 @@ export function processAnswer(
     });
 
     interviewerMessage = question;
+    nextObjectiveId = objectiveId;
     updated.questionNumber = session.questionNumber + 1;
     updated.currentTopic.questionsAsked += 1;
   }
 
+  const nextQuestionId = generateId();
+  updated.currentQuestionId = nextQuestionId;
+  updated.currentQuestion = interviewerMessage;
+  updated.currentObjectiveId = nextObjectiveId;
+  updated.questionStartedAt = Date.now();
   updated.conversationHistory = [
     ...updated.conversationHistory,
-    createMessage("interviewer", interviewerMessage),
+    createMessage("interviewer", interviewerMessage, {
+      questionId: nextQuestionId,
+      kind: "question",
+    }),
+  ];
+
+  return { session: updated, interviewerMessage, isComplete: false };
+}
+
+export function generateHint(session: InterviewSession): {
+  session: InterviewSession;
+  hint: string;
+} {
+  if (session.hintsUsed.includes(session.currentQuestionId)) {
+    return {
+      session,
+      hint: "A hint has already been used for this question.",
+    };
+  }
+
+  const topicData = getTopicById(session.curriculum, session.currentTopic.topicId);
+  const objective =
+    topicData?.topic.learningObjectives.find(
+      (o) => o.id === session.currentObjectiveId
+    ) ?? topicData?.topic.learningObjectives[0];
+  const clue = objective?.keywords?.slice(0, session.selectedDifficulty === "hard" ? 2 : 4);
+  const hint = `Think about **${topicData?.topic.title ?? session.currentTopic.topicTitle}** in terms of ${
+    objective?.description.toLowerCase() ?? "the relevant learning objective"
+  }.${clue?.length ? ` Useful concepts to consider: ${clue.join(", ")}.` : ""}`;
+
+  const updated = {
+    ...session,
+    hintsUsed: [...session.hintsUsed, session.currentQuestionId],
+    conversationHistory: [
+      ...session.conversationHistory,
+      createMessage("interviewer", hint, {
+        questionId: session.currentQuestionId,
+        kind: "hint",
+      }),
+    ],
+  };
+
+  return { session: updated, hint };
+}
+
+export function skipQuestion(session: InterviewSession): {
+  session: InterviewSession;
+  interviewerMessage: string;
+  isComplete: boolean;
+} {
+  if (session.skipTokensRemaining <= 0) {
+    return {
+      session,
+      interviewerMessage: "No skip tokens remain.",
+      isComplete: session.isComplete,
+    };
+  }
+
+  const skipped: QuestionReview = {
+    questionId: session.currentQuestionId,
+    question: session.currentQuestion,
+    candidateAnswer: "",
+    modelAnswer: generateModelAnswer(
+      session.curriculum,
+      session.currentTopic.topicId,
+      session.currentObjectiveId,
+      ""
+    ),
+    feedback: "Question skipped by candidate.",
+    topic: session.currentTopic.topicTitle,
+    day: session.currentTopic.dayTitle,
+    skipped: true,
+  };
+
+  const updated: InterviewSession = {
+    ...session,
+    skipTokensRemaining: session.skipTokensRemaining - 1,
+    skippedQuestions: [...session.skippedQuestions, skipped],
+    questionReviews: [...session.questionReviews, skipped],
+    topicCoverages: [...session.topicCoverages, session.currentTopic],
+  };
+
+  const coveredIds = [
+    ...updated.topicCoverages.map((t) => t.topicId),
+    session.currentTopic.topicId,
+  ];
+  const nextTopic = selectNextTopic(
+    session.curriculum,
+    session.candidateProfile,
+    coveredIds
+  );
+
+  if (!nextTopic) {
+    updated.isComplete = true;
+    const closing = generateClosingMessage();
+    updated.conversationHistory = [
+      ...session.conversationHistory,
+      createMessage("candidate", "[Skipped question]", {
+        questionId: session.currentQuestionId,
+        kind: "answer",
+      }),
+      createMessage("interviewer", closing, { kind: "system" }),
+    ];
+    return { session: updated, interviewerMessage: closing, isComplete: true };
+  }
+
+  const topicInfo = getTopicById(session.curriculum, nextTopic.topicId);
+  const uncovered = topicInfo?.topic.learningObjectives.map((o) => o.id) ?? [];
+  const { question, objectiveId } = generateQuestion({
+    topicId: nextTopic.topicId,
+    curriculum: session.curriculum,
+    profile: session.candidateProfile,
+    difficulty: updated.difficulty,
+    conversationHistory: updated.conversationHistory,
+    questionNumber: session.questionNumber + 1,
+    uncoveredObjectives: uncovered,
+    isFollowUp: false,
+  });
+  const transition = generateTransitionMessage(
+    session.currentTopic.topicTitle,
+    nextTopic.topicTitle,
+    nextTopic.day
+  );
+  const questionId = generateId();
+  const interviewerMessage = `${transition}\n\n${question}`;
+
+  updated.currentTopic = { ...nextTopic, questionsAsked: 1 };
+  updated.questionNumber = session.questionNumber + 1;
+  updated.currentQuestionId = questionId;
+  updated.currentQuestion = interviewerMessage;
+  updated.currentObjectiveId = objectiveId;
+  updated.questionStartedAt = Date.now();
+  updated.conversationHistory = [
+    ...session.conversationHistory,
+    createMessage("candidate", "[Skipped question]", {
+      questionId: session.currentQuestionId,
+      kind: "answer",
+    }),
+    createMessage("interviewer", interviewerMessage, {
+      questionId,
+      kind: "question",
+    }),
   ];
 
   return { session: updated, interviewerMessage, isComplete: false };
@@ -325,6 +610,7 @@ export function generateReport(session: InterviewSession): InterviewReport {
   }));
 
   const avgScore = session.score;
+  const scoreBreakdown = averageBreakdown(session.evaluations);
   const skippedTopics = session.candidateProfile.skippedTopics
     .map((s) => {
       const info = getTopicById(session.curriculum, s.topicId);
@@ -389,7 +675,10 @@ export function generateReport(session: InterviewSession): InterviewReport {
     candidateId: session.candidateProfile.candidateId,
     candidateName: session.candidateProfile.name,
     date: new Date().toISOString().split("T")[0],
+    interviewTimestamp: new Date().toISOString(),
+    selectedDifficulty: session.selectedDifficulty,
     overallScore: avgScore,
+    scoreBreakdown,
     strengths: session.strengths,
     weaknesses: session.weaknesses,
     topicBreakdown,
@@ -397,6 +686,8 @@ export function generateReport(session: InterviewSession): InterviewReport {
     recommendations: [...new Set(recommendations)],
     nextTopicsToReview,
     communicationFeedback,
+    questionReviews: session.questionReviews,
+    skippedQuestions: session.skippedQuestions,
     conversationHistory: session.conversationHistory,
   };
 }

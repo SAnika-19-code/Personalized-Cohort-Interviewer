@@ -13,10 +13,15 @@ import {
 } from "@/lib/parser";
 import { formatCandidateDisplay } from "@/lib/utils";
 import type { Curriculum, CandidateProfile } from "@/types";
+import type { InterviewStyle } from "@/types";
 import type { CandidateRecord } from "@/types/upload";
 
 interface SetupScreenProps {
-  onStart: (curriculum: Curriculum, profile: CandidateProfile) => void;
+  onStart: (
+    curriculum: Curriculum,
+    profile: CandidateProfile,
+    selectedDifficulty: InterviewStyle
+  ) => void;
   isLoading?: boolean;
 }
 
@@ -28,6 +33,8 @@ export function SetupScreen({ onStart, isLoading }: SetupScreenProps) {
   const [candidatesError, setCandidatesError] = useState<string>();
   const [curriculumFileName, setCurriculumFileName] = useState<string>();
   const [candidatesFileName, setCandidatesFileName] = useState<string>();
+  const [selectedDifficulty, setSelectedDifficulty] =
+    useState<InterviewStyle>("medium");
 
   const selectedRecord = candidates.find(
     (c) => c.member.id === selectedCandidateId
@@ -116,6 +123,26 @@ export function SetupScreen({ onStart, isLoading }: SetupScreenProps) {
               <h2 className="text-lg font-semibold text-white">Status</h2>
 
               <div className="space-y-4">
+                <div className="rounded-lg bg-background/50 p-4">
+                  <p className="mb-3 text-xs text-slate-400">Interview Style</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(["easy", "medium", "hard"] as const).map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setSelectedDifficulty(option)}
+                        className={`rounded-lg border px-3 py-2 text-sm font-medium capitalize transition-colors ${
+                          selectedDifficulty === option
+                            ? "border-accent bg-accent text-background"
+                            : "border-slate-600 bg-background text-slate-300 hover:border-slate-500"
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {candidates.length > 0 && (
                   <div className="rounded-lg bg-background/50 p-4">
                     <label
@@ -206,7 +233,9 @@ export function SetupScreen({ onStart, isLoading }: SetupScreenProps) {
               className="mt-8 w-full gap-2 text-base"
               disabled={!isReady || isLoading}
               onClick={() => {
-                if (curriculum && profile) onStart(curriculum, profile);
+                if (curriculum && profile) {
+                  onStart(curriculum, profile, selectedDifficulty);
+                }
               }}
             >
               <Play className="h-5 w-5" />

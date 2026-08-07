@@ -4,6 +4,8 @@ import { motion } from "framer-motion";
 import {
   Download,
   Copy,
+  FileJson,
+  FileText,
   RotateCcw,
   TrendingUp,
   TrendingDown,
@@ -11,7 +13,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { generatePDFReport, copyMarkdownToClipboard } from "@/lib/export";
+import {
+  generatePDFReport,
+  copyMarkdownToClipboard,
+  downloadJSONReport,
+  downloadMarkdownReport,
+} from "@/lib/export";
 import type { InterviewReport } from "@/types";
 import { useState } from "react";
 
@@ -34,7 +41,14 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
       ? "text-success"
       : report.overallScore >= 55
         ? "text-warning"
-        : "text-error";
+      : "text-error";
+  const scoreRows = [
+    ["Technical Accuracy", report.scoreBreakdown.technicalAccuracy],
+    ["Communication Clarity", report.scoreBreakdown.communicationClarity],
+    ["Completeness", report.scoreBreakdown.completeness],
+    ["Problem Solving", report.scoreBreakdown.problemSolving],
+    ["Code Quality", report.scoreBreakdown.codeQuality],
+  ] as const;
 
   return (
     <div className="min-h-screen overflow-y-auto bg-background p-6">
@@ -49,7 +63,7 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
           </h1>
           <p className="text-slate-400">
             {report.candidateName ?? `Candidate #${report.candidateId}`} ·{" "}
-            {report.date}
+            {report.date} · {report.selectedDifficulty.toUpperCase()}
           </p>
         </div>
 
@@ -63,6 +77,23 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
             value={report.overallScore}
             className="mx-auto mt-4 max-w-md h-2"
           />
+        </div>
+
+        <div className="rounded-2xl bg-panel p-6">
+          <h2 className="mb-4 text-lg font-semibold text-white">
+            Score Breakdown
+          </h2>
+          <div className="space-y-4">
+            {scoreRows.map(([label, score]) => (
+              <div key={label}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="text-slate-300">{label}</span>
+                  <span className="font-medium text-white">{score}/100</span>
+                </div>
+                <Progress value={score} className="h-2" />
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
@@ -180,10 +211,84 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
           )}
         </div>
 
+        <div className="rounded-2xl bg-panel p-6">
+          <h2 className="mb-4 text-lg font-semibold text-white">
+            Model Answer Comparison
+          </h2>
+          <div className="space-y-5">
+            {report.questionReviews.map((review) => (
+              <div
+                key={review.questionId}
+                className="rounded-lg border border-slate-700 bg-background/40 p-4"
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-white">
+                    {review.skipped ? "Skipped: " : ""}
+                    {review.topic}
+                  </p>
+                  {review.evaluation && (
+                    <span className="text-xs text-accent">
+                      {review.evaluation.overall}/100
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-3 text-sm leading-relaxed">
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase text-slate-500">
+                      Question
+                    </p>
+                    <p className="whitespace-pre-wrap text-slate-300">
+                      {review.question}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase text-slate-500">
+                      Candidate Answer
+                    </p>
+                    <p className="whitespace-pre-wrap text-slate-300">
+                      {review.candidateAnswer || "Skipped"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase text-slate-500">
+                      Model Answer
+                    </p>
+                    <p className="whitespace-pre-wrap text-slate-300">
+                      {review.modelAnswer}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase text-slate-500">
+                      Feedback
+                    </p>
+                    <p className="text-slate-300">{review.feedback}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <div className="flex flex-wrap justify-center gap-4 pb-8">
           <Button onClick={() => generatePDFReport(report)} className="gap-2">
             <Download className="h-4 w-4" />
             Save PDF
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => downloadJSONReport(report)}
+            className="gap-2"
+          >
+            <FileJson className="h-4 w-4" />
+            Export JSON
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => downloadMarkdownReport(report)}
+            className="gap-2"
+          >
+            <FileText className="h-4 w-4" />
+            Export Markdown
           </Button>
           <Button variant="secondary" onClick={handleCopy} className="gap-2">
             <Copy className="h-4 w-4" />

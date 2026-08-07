@@ -46,6 +46,18 @@ function assessCommunication(answer: string): number {
   return Math.min(100, score);
 }
 
+function assessCodeQuality(answer: string): number {
+  const hasCode = /```[\s\S]*?```|`[^`]+`|function|class|def |const |let |import |select /i.test(answer);
+  if (!hasCode) return 60;
+
+  let score = 45;
+  if (/```(python|py|javascript|js|typescript|ts|json|sql|bash|sh)?/i.test(answer)) score += 15;
+  if (/\b(error|try|catch|except|validate|edge|test)\b/i.test(answer)) score += 15;
+  if (/\bconst\b|\blet\b|\bdef\b|\bclass\b|\breturn\b|\bselect\b/i.test(answer)) score += 15;
+  if (answer.length > 180) score += 10;
+  return Math.min(100, score);
+}
+
 function detectMisconception(
   answer: string,
   topic: CurriculumDay & { id?: string }
@@ -89,6 +101,7 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
 
   const lengthScore = assessLength(answer);
   const communication = assessCommunication(answer);
+  const codeQuality = assessCodeQuality(answer);
 
   const conceptAccuracy = Math.min(
     100,
@@ -124,6 +137,7 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
         keywordRatio * 15
     )
   );
+  const problemSolving = reasoning;
 
   const confidence = Math.min(
     100,
@@ -139,7 +153,7 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     conceptAccuracy * 0.25 +
       completeness * 0.2 +
       depth * 0.2 +
-      reasoning * 0.2 +
+      problemSolving * 0.2 +
       communication * 0.1 +
       confidence * 0.05
   );
@@ -169,7 +183,15 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     reasoning,
     communication,
     confidence,
+    codeQuality,
     overall,
+    scoreBreakdown: {
+      technicalAccuracy: conceptAccuracy,
+      communicationClarity: communication,
+      completeness,
+      problemSolving,
+      codeQuality,
+    },
     feedback,
     isCorrect,
     isPartial,
