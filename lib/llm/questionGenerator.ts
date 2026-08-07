@@ -7,7 +7,7 @@ import type {
   ChatMessage,
   InterviewStyle,
 } from "@/types";
-import { getTopicById, getAllTopics } from "@/lib/interview/topicSelector";
+import { getTopicById } from "@/lib/interview/topicSelector";
 import { LLMProvider, createLLMProvider } from "./provider";
 
 const PERSONA_PROMPTS: Record<InterviewStyle, string> = {

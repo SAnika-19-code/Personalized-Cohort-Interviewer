@@ -77,6 +77,17 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
             value={report.overallScore}
             className="mx-auto mt-4 max-w-md h-2"
           />
+          {typeof report.learningAgility === "number" && (
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm">
+              <div className="rounded-xl bg-background/50 px-5 py-3">
+                <p className="text-xs text-slate-400">Learning Agility</p>
+                <p className="text-xl font-bold text-accent">
+                  {report.learningAgility}
+                  <span className="text-xs text-slate-400">/100</span>
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl bg-panel p-6">

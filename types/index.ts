@@ -1,3 +1,5 @@
+import type { CandidateResponseAnalysis } from "@/lib/interview/responseAnalyzer";
+
 export interface LearningObjective {
   id: string;
   description: string;
@@ -106,6 +108,9 @@ export interface EvaluationResult {
   isPartial: boolean;
   misconception?: string;
   objectivesAssessed: string[];
+  learningAgility?: number;
+  responseType?: string;
+  honestyCredit?: number;
 }
 
 export interface QuestionReview {
@@ -159,6 +164,10 @@ export interface InterviewSession {
   lastRemark?: string;
   isComplete: boolean;
   startedAt: number;
+  askedObjectiveIds: string[];
+  askedQuestions: string[];
+  learningAgility: number;
+  analysisLog: CandidateResponseAnalysis[];
 }
 
 export interface InterviewReport {
@@ -184,6 +193,7 @@ export interface InterviewReport {
   questionReviews: QuestionReview[];
   skippedQuestions: QuestionReview[];
   conversationHistory: ChatMessage[];
+  learningAgility?: number;
 }
 
 export interface StartInterviewRequest {

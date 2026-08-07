@@ -9,6 +9,7 @@ interface EvaluateParams {
   topic: CurriculumDay & { id?: string };
   objectiveId: string;
   difficulty: DifficultyLevel;
+  responseAnalysis?: import("@/lib/interview/responseAnalyzer").CandidateResponseAnalysis;
 }
 
 function normalizeText(text: string): string {
@@ -90,7 +91,7 @@ function detectMisconception(
 }
 
 export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
-  const { answer, topic, objectiveId, difficulty } = params;
+  const { answer, topic, objectiveId, difficulty, responseAnalysis } = params;
   const objective =
     topic.learningObjectives.find((o) => o.id === objectiveId) ??
     topic.learningObjectives[0];
@@ -102,6 +103,9 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
   const lengthScore = assessLength(answer);
   const communication = assessCommunication(answer);
   const codeQuality = assessCodeQuality(answer);
+
+  const responseType = responseAnalysis?.responseType;
+  const isHonestUnknown = responseType === "DOES_NOT_KNOW" || responseType === "DID_NOT_UNDERSTAND";
 
   const conceptAccuracy = Math.min(
     100,
@@ -149,6 +153,18 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     )
   );
 
+  const honestyCredit = isHonestUnknown ? 90 : 0;
+  const confidenceIncorrect = responseType === "INCORRECT" ? 0.85 : 0.5;
+  const learningAgility = Math.min(
+    100,
+    Math.round(
+      (isHonestUnknown ? 65 : responseType === "PARTIALLY_CORRECT" ? 60 : 40) +
+        (answer.length > 30 ? 10 : 0) +
+        (/\bwould|should|could|let me think|good question|interesting/i.test(answer) ? 10 : 0) +
+        (responseType === "INCORRECT" ? Math.round(confidenceIncorrect * 10) : 10)
+    )
+  );
+
   const overall = Math.round(
     conceptAccuracy * 0.25 +
       completeness * 0.2 +
@@ -164,12 +180,16 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
   const misconception = !isCorrect ? detectMisconception(answer, topic) : undefined;
 
   let feedback: string;
-  if (overall >= 85) {
+  if (isHonestUnknown) {
+    feedback = `Candidate honestly acknowledged not knowing the concept. Strength: did not attempt to fabricate an answer. Gap: needs stronger understanding of ${objective?.description.toLowerCase() ?? "the objective"}. Recommendation: review the core concepts — ${keywords.slice(0, 4).join(", ")} — through a small hands-on exercise, then retry.`;
+  } else if (responseType === "INCORRECT" && responseAnalysis?.misconceptions.length) {
+    feedback = `Candidate gave an incorrect explanation with a misconception: ${responseAnalysis.misconceptions[0]}. Gap: needs correction on ${keywords.slice(0, 3).join(", ") || "the core concept"}. Recommendation: review the concept with a worked example before moving on.`;
+  } else if (overall >= 85) {
     feedback = "Excellent response demonstrating strong understanding and clear communication.";
   } else if (overall >= 70) {
-    feedback = "Good answer with solid grasp of core concepts. Some areas could use more depth.";
+    feedback = "Good answer with solid grasp of core concepts. Some areas could use more depth — add trade-offs and concrete examples.";
   } else if (overall >= 50) {
-    feedback = "Partial understanding shown. Key concepts mentioned but explanation lacks completeness.";
+    feedback = `Partial understanding shown. Strengths: ${responseAnalysis?.strengths.join(", ") || "key concepts mentioned"}. Gap: explanation lacks completeness around ${responseAnalysis?.missingConcepts.slice(0, 3).join(", ") || "core concepts"}. Recommendation: structure answers as concept → example → trade-offs.`;
   } else if (overall >= 30) {
     feedback = "Limited understanding demonstrated. Several core concepts were missed or unclear.";
   } else {
@@ -197,6 +217,9 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     isPartial,
     misconception,
     objectivesAssessed: [objectiveId],
+    learningAgility,
+    honestyCredit,
+    responseType,
   };
 }
 

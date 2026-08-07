@@ -14,8 +14,8 @@ export async function POST(request: NextRequest) {
     }
 
     const { session, interviewerMessage, isComplete } = body.skipCurrent
-      ? skipQuestion(body.session)
-      : processAnswer(body.session, body.candidateAnswer!.trim());
+      ? await skipQuestion(body.session)
+      : await processAnswer(body.session, body.candidateAnswer!.trim());
 
     return NextResponse.json({
       interviewerMessage,
