@@ -111,17 +111,21 @@ function generateModelAnswer(
   const keywords = objective?.keywords?.slice(0, 5) ?? [];
   const description = objective?.description ?? "the relevant curriculum objective";
 
+  const keywordList = keywords.slice(0, 4);
+  const primaryKeyword = keywordList[0] ?? "the core concept";
+  const secondaryKeyword = keywordList[1] ?? "practical application";
+
   const parts: string[] = [];
   parts.push(`**${title}** — ${description}.`);
   parts.push(
-    `A strong answer explains the core concept first (${keywords.slice(0, 4).join(", ")}), then connects it to a practical workflow using ${tools}, names the key trade-offs, and describes how you would verify the approach in production.`
+    `Example: "To ${description.toLowerCase()}, I would start by understanding ${primaryKeyword} and how it applies to ${title.toLowerCase()}. Using ${tools}, I would build a workflow that handles ${secondaryKeyword} — for instance, processing real inputs, applying the transformation, and validating the output. The key trade-off is between [speed/accuracy/cost] depending on the scale, and I would verify the approach by testing against known benchmarks and checking edge cases in production."`
   );
 
   const missed = keywords.filter(
     (keyword) => !candidateAnswer.toLowerCase().includes(keyword.toLowerCase())
   );
   if (missed.length) {
-    parts.push(`Concepts the answer should have included: ${missed.join(", ")}.`);
+    parts.push(`Concepts a strong answer should reference: ${missed.join(", ")}.`);
   }
 
   return parts.join("\n\n");
@@ -720,7 +724,7 @@ export function generateReport(session: InterviewSession): InterviewReport {
 
   const topicBreakdown = allTopicCoverages.map((tc) => ({
     topic: tc.topicTitle,
-    day: tc.dayTitle,
+    day: tc.dayTitle && tc.dayTitle !== tc.topicTitle ? tc.dayTitle : `Day ${tc.day}`,
     score: Math.round(tc.score),
     objectivesCovered: tc.objectivesCovered.length,
   }));

@@ -49,7 +49,7 @@ function assessCommunication(answer: string): number {
 
 function assessCodeQuality(answer: string): number {
   const hasCode = /```[\s\S]*?```|`[^`]+`|function|class|def |const |let |import |select /i.test(answer);
-  if (!hasCode) return 60;
+  if (!hasCode) return 0;
 
   let score = 45;
   if (/```(python|py|javascript|js|typescript|ts|json|sql|bash|sh)?/i.test(answer)) score += 15;
@@ -179,21 +179,24 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
 
   const misconception = !isCorrect ? detectMisconception(answer, topic) : undefined;
 
+  const objectiveDesc = objective?.description.toLowerCase() ?? "the core concept";
+  const missingText = responseAnalysis?.missingConcepts.slice(0, 3).join(", ") ?? "the fundamentals";
+
   let feedback: string;
   if (isHonestUnknown) {
-    feedback = `Candidate honestly acknowledged not knowing the concept. Strength: did not attempt to fabricate an answer. Gap: needs stronger understanding of ${objective?.description.toLowerCase() ?? "the objective"}. Recommendation: review the core concepts — ${keywords.slice(0, 4).join(", ")} — through a small hands-on exercise, then retry.`;
+    feedback = `Candidate honestly acknowledged not knowing the concept. Strength: did not attempt to fabricate an answer. Gap: needs stronger understanding of ${objectiveDesc}. Recommendation: review the core concepts — ${keywords.slice(0, 4).join(", ")} — through a small hands-on exercise, then retry.`;
   } else if (responseType === "INCORRECT" && responseAnalysis?.misconceptions.length) {
     feedback = `Candidate gave an incorrect explanation with a misconception: ${responseAnalysis.misconceptions[0]}. Gap: needs correction on ${keywords.slice(0, 3).join(", ") || "the core concept"}. Recommendation: review the concept with a worked example before moving on.`;
   } else if (overall >= 85) {
-    feedback = "Excellent response demonstrating strong understanding and clear communication.";
+    feedback = `Excellent response on ${objectiveDesc} — demonstrated strong understanding and clear communication.`;
   } else if (overall >= 70) {
-    feedback = "Good answer with solid grasp of core concepts. Some areas could use more depth — add trade-offs and concrete examples.";
+    feedback = `Good answer on ${objectiveDesc}. Solid grasp of the main ideas; could go deeper on trade-offs and concrete examples.`;
   } else if (overall >= 50) {
-    feedback = `Partial understanding shown. Strengths: ${responseAnalysis?.strengths.join(", ") || "key concepts mentioned"}. Gap: explanation lacks completeness around ${responseAnalysis?.missingConcepts.slice(0, 3).join(", ") || "core concepts"}. Recommendation: structure answers as concept → example → trade-offs.`;
+    feedback = `Partial understanding of ${objectiveDesc}. Strengths: ${responseAnalysis?.strengths.join(", ") || "some key concepts mentioned"}. Gap: explanation lacks completeness around ${missingText}. Recommendation: structure answers as concept → example → trade-offs.`;
   } else if (overall >= 30) {
-    feedback = "Limited understanding demonstrated. Several core concepts were missed or unclear.";
+    feedback = `Limited understanding of ${objectiveDesc}. Several core concepts were missed or unclear. Recommendation: revisit ${missingText} before moving on.`;
   } else {
-    feedback = "Response did not adequately address the learning objectives for this topic.";
+    feedback = `Response did not adequately address ${objectiveDesc}. The core concepts — ${keywords.slice(0, 3).join(", ") || "the fundamentals"} — were missing. Recommendation: study the basics and try again.`;
   }
 
   return {

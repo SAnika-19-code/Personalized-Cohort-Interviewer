@@ -146,12 +146,65 @@ function buildFollowUpQuestion(context: ConversationContext, focus: string): str
   } else if (focus === "rephrased_question") {
     const obj = currentTopic.learningObjectives[0];
     const simpleKeyword = obj?.keywords?.[0] ?? analysis.missingConcepts[0] ?? "this concept";
-    question = `Let me break it down. When I ask about ${obj?.description.toLowerCase() ?? "this concept"}, I want to know: how would you work with ${simpleKeyword} in practice, and what does it do?`;
+    const gerund = toGerund(obj?.description ?? "this concept");
+    question = `Let me break it down. When we talk about ${gerund}, I want to know: how would you work with ${simpleKeyword} in practice, and what does it do?`;
   } else {
     question = `Can you elaborate on the implementation details for ${topicTitle}?`;
   }
 
   return template.replace("{question}", question).replace("{concept}", analysis.missingConcepts[0] ?? "the concept");
+}
+
+const IMPERATIVE_VERBS = new Set([
+  "learn", "understand", "create", "install", "set", "write", "store",
+  "compare", "generate", "build", "design", "implement", "explain",
+  "describe", "identify", "define", "use", "make", "develop", "deploy",
+  "configure", "analyze", "evaluate", "manage", "plan", "test", "debug",
+  "refactor", "optimize", "integrate", "migrate", "monitor", "document",
+  "review", "update", "handle", "process", "convert", "transform",
+  "extract", "load", "fetch", "retrieve", "query", "filter", "sort",
+  "join", "aggregate", "index", "search", "match", "rank", "score",
+  "embed", "encode", "decode", "tokenize", "chunk", "split", "merge",
+  "combine", "map", "reduce", "iterate", "cache", "persist", "serialize",
+  "compress", "encrypt", "decrypt", "hash", "verify", "validate",
+  "ensure", "check", "run", "start", "stop", "get", "add", "remove",
+  "delete", "insert", "select", "find", "show", "display", "render",
+  "read", "open", "close", "send", "receive", "clean", "clear", "reset",
+  "restart", "walk", "give", "help", "keep", "try", "take", "look",
+  "think", "consider", "follow", "apply", "perform", "execute", "call",
+  "trigger", "listen", "emit", "publish", "subscribe", "push", "pull",
+  "schedule", "queue", "dispatch", "route", "replicate", "shard",
+  "backup", "restore", "snapshot", "rollback", "commit", "transact",
+  "lock", "unlock", "wait", "cancel", "abort", "resume", "pause", "setup",
+  "setup", "set up", "seeding", "troubleshoot", "illustrate", "demonstrate",
+]);
+
+function verbToGerund(verb: string): string {
+  const lower = verb.toLowerCase();
+  if (lower === "setup" || lower === "set up") return "setting up";
+  if (/setup$/.test(lower)) return lower.replace(/setup$/, "setting up");
+  if (/e$/.test(lower)) return lower.slice(0, -1) + "ing";
+  if (lower.length <= 6 && /[^aeiou][aeiou][^aeiouwxy]$/.test(lower)) {
+    return lower + lower[lower.length - 1] + "ing";
+  }
+  return lower + "ing";
+}
+
+function toGerund(phrase: string): string {
+  const words = phrase.split(" ");
+  if (words.length === 0) return phrase;
+  if (IMPERATIVE_VERBS.has(words[0].toLowerCase())) {
+    words[0] = verbToGerund(words[0]);
+  }
+  for (let i = 2; i < words.length; i++) {
+    if (
+      words[i - 1].toLowerCase() === "and" &&
+      IMPERATIVE_VERBS.has(words[i].toLowerCase())
+    ) {
+      words[i] = verbToGerund(words[i]);
+    }
+  }
+  return words.join(" ");
 }
 
 function buildTransitionQuestion(context: ConversationContext): string {
@@ -165,7 +218,7 @@ function buildTransitionQuestion(context: ConversationContext): string {
 
   const firstObjective = currentTopic.learningObjectives[0];
   const openingQuestion = firstObjective
-    ? `To start, in your own words, what is ${firstObjective.description.toLowerCase()}?`
+    ? `To start, can you walk me through ${toGerund(firstObjective.description)}?`
     : `To start, could you give me an overview of ${nextTopicTitle}?`;
 
   return `${transition}\n\n${openingQuestion}`;
@@ -190,12 +243,13 @@ function buildCorrectionQuestion(context: ConversationContext): string {
 function buildTeachingQuestion(context: ConversationContext): string {
   const { analysis, currentTopic, selectedStyle } = context;
   const obj = currentTopic.learningObjectives[0];
+  const gerund = toGerund(obj?.description ?? "this concept");
 
   if (selectedStyle === "easy") {
-    return `Now that I've explained the basics, let me ask something simpler: In your own words, how would you describe ${obj?.description.toLowerCase() ?? "this concept"}?`;
+    return `Now that I've explained the basics, let me ask something simpler: In your own words, can you walk me through ${gerund}?`;
   }
 
-  return `Let me verify your understanding. If you had to implement ${obj?.description.toLowerCase() ?? "this"}, what would be your first step?`;
+  return `Let me verify your understanding. Can you walk me through ${gerund}?`;
 }
 
 function buildClarificationQuestion(context: ConversationContext): string {
