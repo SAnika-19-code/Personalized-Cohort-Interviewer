@@ -8,7 +8,11 @@ export interface CandidateResponseAnalysis {
     | "UNCERTAIN"
     | "OFF_TOPIC"
     | "LOW_EFFORT"
-    | "MEMORIZED";
+    | "MEMORIZED"
+    | "CLARIFICATION"
+    | "TOPIC_SWITCH"
+    | "TOPIC_SKIP"
+    | "REFUSAL";
 
   confidence: number;
 
@@ -27,7 +31,11 @@ export interface CandidateResponseAnalysis {
     | "TEACH_BRIEFLY"
     | "ASK_CLARIFICATION"
     | "MOVE_FORWARD"
-    | "VERIFY_UNDERSTANDING";
+    | "VERIFY_UNDERSTANDING"
+    | "HANDLE_CLARIFICATION"
+    | "HANDLE_TOPIC_SWITCH"
+    | "HANDLE_TOPIC_SKIP"
+    | "HANDLE_REFUSAL";
 
   depthCheckRequired: boolean;
 }
@@ -98,9 +106,68 @@ const UNCERTAIN_PATTERNS = [
   /probably/i,
 ];
 
+const CLARIFICATION_PATTERNS = [
+  /can you rephrase/i,
+  /can you clarify/i,
+  /i don't understand/i,
+  /i don't get it/i,
+  /what do you mean/i,
+  /could you explain/i,
+  /what do you mean/i,
+  /unclear/i,
+  /confused/i,
+  /repeat the question/i,
+  /rephrase/i,
+  /i don't understand/i,
+  /don't understand/i,
+];
+
+const TOPIC_SWITCH_PATTERNS = [
+  /can we switch topics?/i,
+  /can we switch topics?/i,
+  /switch topics?/i,
+  /switch topic/i,
+  /move on to another topic/i,
+  /change topics?/i,
+  /change topic/i,
+  /next topic/i,
+  /different topic/i,
+  /new topic/i,
+  /let's switch/i,
+  /let's move on/i,
+  /move to another/i,
+  /switch to another/i,
+];
+
+const TOPIC_SKIP_PATTERNS = [
+  /can we skip/i,
+  /skip this/i,
+  /skip this topic/i,
+  /skip this question/i,
+  /let's skip/i,
+  /let's skip this/i,
+  /skip it/i,
+  /pass this/i,
+  /pass this question/i,
+  /next question/i,
+  /next one/i,
+];
+
+const REFUSAL_PATTERNS = [
+  /i refuse/i,
+  /i won't answer/i,
+  /i won't do this/i,
+  /not going to answer/i,
+  /refuse to answer/i,
+  /i decline/i,
+  /decline to answer/i,
+  /i pass/i,
+  /no comment/i,
+  /i won't/i,
+];
+
 function detectLowEffort(answer: string): boolean {
-  const trimmed = answer.trim().toLowerCase();
-  return LOW_EFFORT_PATTERNS.some((pattern) => pattern.test(trimmed)) && trimmed.length < 20;
+  return DOES_NOT_KNOW_PATTERNS.some((pattern) => pattern.test(answer.toLowerCase()));
 }
 
 function detectDoesNotKnow(answer: string): boolean {
@@ -113,6 +180,22 @@ function detectDidNotUnderstand(answer: string): boolean {
 
 function detectUncertain(answer: string): boolean {
   return UNCERTAIN_PATTERNS.some((pattern) => pattern.test(answer.toLowerCase()));
+}
+
+function detectClarification(answer: string): boolean {
+  return CLARIFICATION_PATTERNS.some((pattern) => pattern.test(answer.toLowerCase()));
+}
+
+function detectTopicSwitch(answer: string): boolean {
+  return TOPIC_SWITCH_PATTERNS.some((pattern) => pattern.test(answer.toLowerCase()));
+}
+
+function detectTopicSkip(answer: string): boolean {
+  return TOPIC_SKIP_PATTERNS.some((pattern) => pattern.test(answer.toLowerCase()));
+}
+
+function detectRefusal(answer: string): boolean {
+  return REFUSAL_PATTERNS.some((pattern) => pattern.test(answer.toLowerCase()));
 }
 
 function detectMemorized(answer: string, keywords: string[]): boolean {
@@ -240,6 +323,58 @@ export function analyzeCandidateResponse(context: AnalysisContext): CandidateRes
     };
   }
 
+  if (detectClarification(trimmedAnswer)) {
+    return {
+      responseType: "CLARIFICATION",
+      confidence: 0.9,
+      reasoning: "Candidate requested clarification or rephrasing of the question.",
+      misconceptions: [],
+      strengths: ["Seeking clarification shows engagement"],
+      missingConcepts: keywords,
+      suggestedStrategy: "HANDLE_CLARIFICATION",
+      depthCheckRequired: false,
+    };
+  }
+
+  if (detectTopicSwitch(trimmedAnswer)) {
+    return {
+      responseType: "TOPIC_SWITCH",
+      confidence: 0.9,
+      reasoning: "Candidate requested to switch to a different topic.",
+      misconceptions: [],
+      strengths: [],
+      missingConcepts: keywords,
+      suggestedStrategy: "HANDLE_TOPIC_SWITCH",
+      depthCheckRequired: false,
+    };
+  }
+
+  if (detectTopicSkip(trimmedAnswer)) {
+    return {
+      responseType: "TOPIC_SKIP",
+      confidence: 0.9,
+      reasoning: "Candidate requested to skip the current topic.",
+      misconceptions: [],
+      strengths: [],
+      missingConcepts: keywords,
+      suggestedStrategy: "HANDLE_TOPIC_SKIP",
+      depthCheckRequired: false,
+    };
+  }
+
+  if (detectRefusal(trimmedAnswer)) {
+    return {
+      responseType: "REFUSAL",
+      confidence: 0.9,
+      reasoning: "Candidate refused to answer the question.",
+      misconceptions: [],
+      strengths: [],
+      missingConcepts: keywords,
+      suggestedStrategy: "HANDLE_REFUSAL",
+      depthCheckRequired: false,
+    };
+  }
+
   if (detectDoesNotKnow(trimmedAnswer)) {
     return {
       responseType: "DOES_NOT_KNOW",
@@ -249,19 +384,6 @@ export function analyzeCandidateResponse(context: AnalysisContext): CandidateRes
       strengths: ["Honesty", "Self-awareness"],
       missingConcepts: keywords,
       suggestedStrategy: selectedStyle === "easy" ? "TEACH_BRIEFLY" : "SIMPLIFY",
-      depthCheckRequired: false,
-    };
-  }
-
-  if (detectUncertain(trimmedAnswer) && wordCount < 50) {
-    return {
-      responseType: "UNCERTAIN",
-      confidence: 0.8,
-      reasoning: "Candidate expressed uncertainty with hedging language.",
-      misconceptions: [],
-      strengths: ["Attempted to answer"],
-      missingConcepts: keywords,
-      suggestedStrategy: "ASK_CLARIFICATION",
       depthCheckRequired: false,
     };
   }

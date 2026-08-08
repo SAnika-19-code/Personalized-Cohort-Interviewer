@@ -144,7 +144,7 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     topic.learningObjectives.find((o) => o.id === objectiveId) ??
     topic.learningObjectives[0];
 
-  const keywords = objective?.keywords ?? extractKeywordsFromDescription(objective?.description ?? "");
+  const keywords: string[] = (objective?.keywords ?? extractKeywordsFromDescription(objective?.description ?? "")) ?? [];
   const keywordMatches = countKeywordMatches(answer, keywords);
   const keywordRatio = keywords.length > 0 ? keywordMatches / keywords.length : 0.5;
 
@@ -152,8 +152,27 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
   const communication = assessCommunication(answer);
   const codeQuality = assessCodeQuality(answer);
 
-  const responseType = responseAnalysis?.responseType;
+  const responseType = responseAnalysis?.responseType ?? "UNKNOWN";
   const isHonestUnknown = responseType === "DOES_NOT_KNOW" || responseType === "DID_NOT_UNDERSTAND";
+
+  // Control intents that should NOT receive technical evaluation
+  const controlIntents = new Set([
+    "DOES_NOT_KNOW",
+    "DID_NOT_UNDERSTAND",
+    "CLARIFICATION",
+    "TOPIC_SWITCH",
+    "TOPIC_SKIP",
+    "REFUSAL",
+    "OFF_TOPIC",
+    "LOW_EFFORT",
+    "UNCERTAIN",
+  ]);
+  const isControlIntent = controlIntents.has(responseType);
+
+  if (isControlIntent) {
+    const effectiveResponseType = responseType ?? "UNKNOWN";
+    return handleControlIntent(answer, effectiveResponseType, keywords, responseType, topic);
+  }
 
   const depth = assessDepth(answer, topic);
 
@@ -371,4 +390,87 @@ export function deriveStrengthsAndWeaknesses(
   }
 
   return { strengths: [...new Set(strengths)], weaknesses: [...new Set(weaknesses)] };
+}
+
+function handleControlIntent(
+  answer: string,
+  responseType: string,
+  keywords: string[],
+  responseTypeForFeedback: string,
+  topic: any
+): EvaluationResult {
+  const communication = assessCommunication("");
+
+  const objectiveDesc = "the core concept";
+  const missingText = "the fundamentals";
+
+  let feedback: string;
+  if (responseType === "DOES_NOT_KNOW") {
+    feedback = "Candidate honestly acknowledged not knowing the concept. Strength: did not attempt to fabricate an answer. Gap: needs stronger understanding of the core concept. Recommendation: review the core concepts — " + keywords.slice(0, 4).join(", ") + " — through a small hands-on exercise, then retry.";
+  } else if (responseType === "DID_NOT_UNDERSTAND") {
+    feedback = "Candidate indicated they did not understand the question. Strength: honesty about confusion. Gap: needs clarification on the question. Recommendation: rephrase the question and try again.";
+  } else if (responseType === "CLARIFICATION") {
+    feedback = "Candidate requested clarification or rephrasing of the question. Strength: engagement with the question. Recommendation: rephrase the question and provide additional context.";
+  } else if (responseType === "TOPIC_SWITCH") {
+    feedback = "Candidate requested to switch topics. This is a valid interview control action. No technical assessment performed.";
+  } else if (responseType === "TOPIC_SKIP") {
+    feedback = "Candidate requested to skip this topic. No technical assessment performed. Topic marked for potential revisit.";
+  } else if (responseType === "REFUSAL") {
+    feedback = "Candidate declined to answer. No technical assessment performed. Interviewer should explore reasons or move on.";
+  } else if (responseType === "DOES_NOT_KNOW") {
+    feedback = "Candidate honestly acknowledged not knowing the concept. Strength: did not attempt to fabricate an answer. Gap: needs stronger understanding of the core concept. Recommendation: review the core concepts — " + keywords.slice(0, 4).join(", ") + " — through a small hands-on exercise, then retry.";
+  } else if (responseType === "DID_NOT_UNDERSTAND") {
+    feedback = "Candidate indicated they did not understand the question. Strength: honesty about confusion. Gap: needs clarification on the question. Recommendation: rephrase the question and try again.";
+  } else if (responseType === "CLARIFICATION") {
+    feedback = "Candidate requested clarification or rephrasing of the question. Strength: engagement with the question. Recommendation: rephrase the question and provide additional context.";
+  } else if (responseType === "TOPIC_SWITCH") {
+    feedback = "Candidate requested to switch topics. This is a valid interview control action. No technical assessment performed.";
+  } else if (responseType === "TOPIC_SKIP") {
+    feedback = "Candidate requested to skip this topic. No technical assessment performed. Topic marked for potential revisit.";
+  } else if (responseType === "REFUSAL") {
+    feedback = "Candidate declined to answer. No technical assessment performed. Interviewer should explore reasons or move on.";
+  } else if (responseType === "OFF_TOPIC") {
+    feedback = "Response was off-topic. Recommendation: gently redirect to the current topic.";
+  } else if (responseType === "LOW_EFFORT") {
+    feedback = "Response was minimal. Encourage the candidate to elaborate or ask for clarification.";
+  } else if (responseType === "UNCERTAIN") {
+    feedback = "Candidate expressed uncertainty. Recommendation: provide guidance or rephrase the question.";
+  } else {
+    feedback = "Control action — no technical assessment performed.";
+  }
+
+  return {
+    conceptAccuracy: 0,
+    completeness: 0,
+    depth: 0,
+    reasoning: 0,
+    communication: assessCommunication(""),
+    confidence: 50,
+    codeQuality: 0,
+    implementationSpecificity: 0,
+    tradeOffAwareness: 0,
+    technicalVocabulary: 0,
+    structuralQuality: 0,
+    overall: 0,
+    scoreBreakdown: {
+      technicalAccuracy: 0,
+      communicationClarity: 0,
+      completeness: 0,
+      problemSolving: 0,
+      codeQuality: 0,
+      implementationSpecificity: 0,
+      tradeOffAwareness: 0,
+      technicalVocabulary: 0,
+      structuralQuality: 0,
+    },
+    feedback,
+    isCorrect: false,
+    isPartial: false,
+    misconception: undefined,
+    objectivesAssessed: [],
+    learningAgility: 0,
+    honestyCredit: 0,
+    responseType,
+    modelAnswer: "",
+  };
 }

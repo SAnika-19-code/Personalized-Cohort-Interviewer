@@ -428,3 +428,37 @@ Welcome judges! This file covers the twelfth iteration of our "vibe coding" work
 
 ---
 
+# 🤖 Vibe Coding Manifest: AI Technical Interviewer (Phase 2 — Candidate Intent & Interview State Engine)
+
+Welcome judges! This file covers the thirteenth iteration of our "vibe coding" workflow, detailing the implementation of Phase 2 Candidate Intent and Topic-State Management. This phase ensures the system cleanly separates technical answers from conversational control inputs, preventing control events from falsely tanking technical scores or altering difficulty.
+
+---
+
+## 19. Phase 2 Candidate Intent & Topic-State Integrity
+*Prompts and architectural updates implementing structured intent classification, protecting control events from distorting technical mastery, and establishing robust topic lifecycle states.*
+
+> **Prompt:**
+> ```text
+> Implement Phase 2 Candidate Intent and Topic-State Management updates to accurately distinguish technical answers from interview-control interactions without altering scoring formulas:
+> 
+> 1. Structured Candidate Intent Classification:
+>    - Implement or extend an explicit intent system handling ANSWER, DOES_NOT_KNOW, DOES_NOT_UNDERSTAND, CLARIFICATION, TOPIC_SWITCH, TOPIC_SKIP, REFUSAL, and OFF_TOPIC.
+>    - Ensure only genuine ANSWER intents enter normal technical evaluation. Non-answer intents (e.g., "I don't know", "Can you rephrase that?", "Can we switch topics?") must be marked as NOT_ASSESSED and must NOT receive technical correctness scores.
+> 
+> 2. Topic State Lifecycle Management:
+>    - Explicitly distinguish topic states: NOT_STARTED, IN_PROGRESS, COMPLETED, SKIPPED, and ABANDONED.
+>    - Prevent false inferences: a topic must never be marked SKIPPED merely for being incomplete; it requires an explicit skip event.
+> 
+> 3. Control Event Isolation & Behavioral Awareness:
+>    - Ensure conversational control events (switches, skips, clarifications) do not automatically reduce technical mastery scores or incorrectly trigger difficulty drops (e.g., preventing Difficulty 4 from plummeting to Difficulty 1 due to a topic skip request).
+>    - Configure state-aware interviewer responses to handle non-answer intents naturally (e.g., rephrasing for misunderstandings, acknowledging unknown answers, or smoothly transitioning/skipping topics).
+> 
+> 4. Verification & Testing:
+>    - Add comprehensive unit tests covering all intent categories.
+>    - Verify that skipped topics are accurately reported as skipped while unstarted or partially assessed topics are never misreported, and confirm that control events leave technical mastery and difficulty metrics unaffected.
+> ```
+
+---
+
+---
+
