@@ -142,6 +142,7 @@ export async function evaluateAnswerLLM(params: EvaluateParams): Promise<Evaluat
     communication: result.communication,
     confidence: result.confidence,
     codeQuality: result.codeQuality,
+    codeQualityAssessed: true,
     implementationSpecificity: result.implementationSpecificity ?? 50,
     tradeOffAwareness: result.tradeOffAwareness ?? 50,
     technicalVocabulary: result.technicalVocabulary ?? 50,
@@ -329,7 +330,7 @@ export async function generateCommunicationFeedbackLLM(
   }
 
   const commDetails = evaluations.map((e, i) => 
-    `Q${i+1}: Comm ${e.communication}, Structure: ${e.communication >= 70 ? "good" : e.communication >= 50 ? "ok" : "weak"}, Code: ${e.codeQuality >= 70 ? "yes" : "no"}`
+    `Q${i+1}: Comm ${e.communication}, Structure: ${e.communication >= 70 ? "good" : e.communication >= 50 ? "ok" : "weak"}, Code: ${typeof e.codeQuality === "number" && e.codeQuality >= 70 ? "yes" : "no"}`
   ).join("\n");
 
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [

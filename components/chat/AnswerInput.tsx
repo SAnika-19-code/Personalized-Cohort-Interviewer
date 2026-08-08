@@ -5,7 +5,7 @@ import { Mic, Send, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn, estimateReadingTime } from "@/lib/utils";
 
-const MAX_CHARS = 1500;
+const MAX_CHARS = 5000;
 
 interface AnswerInputProps {
   onSubmit: (answer: string) => void;
@@ -15,6 +15,7 @@ interface AnswerInputProps {
 
 export function AnswerInput({ onSubmit, disabled, isLoading }: AnswerInputProps) {
   const [value, setValue] = useState("");
+  const [rawValue, setRawValue] = useState("");
   const [voiceState, setVoiceState] = useState<
     "idle" | "recording" | "transcribing" | "inserted" | "error"
   >("idle");
@@ -36,6 +37,7 @@ export function AnswerInput({ onSubmit, disabled, isLoading }: AnswerInputProps)
     if (!trimmed || disabled || isLoading) return;
     onSubmit(trimmed);
     setValue("");
+    setRawValue("");
   }, [value, disabled, isLoading, onSubmit]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -116,7 +118,11 @@ export function AnswerInput({ onSubmit, disabled, isLoading }: AnswerInputProps)
       <div className="mx-auto max-w-4xl space-y-3">
         <textarea
           value={value}
-          onChange={(e) => setValue(e.target.value.slice(0, MAX_CHARS))}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setRawValue(raw);
+            setValue(raw.slice(0, MAX_CHARS));
+          }}
           onKeyDown={handleKeyDown}
           disabled={disabled || isLoading}
           placeholder={

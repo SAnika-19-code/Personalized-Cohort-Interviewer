@@ -143,7 +143,7 @@ export interface QuestionReview {
   evaluation?: EvaluationResult;
 }
 
-export type TopicMasteryStatus = "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED";
+export type TopicMasteryStatus = "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED" | "IN_PROGRESS";
 
 export interface TopicCoverage {
   topicId: string;
@@ -205,7 +205,7 @@ export interface InterviewReport {
     topic: string;
     day: string;
     score: number | "N/A";
-    masteryStatus: "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED";
+    masteryStatus: "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED" | "IN_PROGRESS";
     objectivesCovered: number;
   }[];
   interviewSummary: string;

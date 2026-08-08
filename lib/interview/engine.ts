@@ -118,7 +118,7 @@ function averageBreakdown(evaluations: EvaluationResult[]): ScoreBreakdown {
           acc.communicationClarity + evaluation.scoreBreakdown.communicationClarity,
         completeness: acc.completeness + evaluation.scoreBreakdown.completeness,
         problemSolving: acc.problemSolving + evaluation.scoreBreakdown.problemSolving,
-        codeQuality: acc.codeQuality + codeQualityValue,
+        codeQuality: (acc.codeQuality === "N/A" ? 0 : acc.codeQuality) + codeQualityValue,
         implementationSpecificity:
           acc.implementationSpecificity + (evaluation.scoreBreakdown.implementationSpecificity ?? 0),
         tradeOffAwareness:
@@ -128,7 +128,7 @@ function averageBreakdown(evaluations: EvaluationResult[]): ScoreBreakdown {
         structuralQuality:
           acc.structuralQuality + (evaluation.scoreBreakdown.structuralQuality ?? 0),
       };
-    }),
+    },
     zero
   );
 
@@ -137,7 +137,7 @@ function averageBreakdown(evaluations: EvaluationResult[]): ScoreBreakdown {
     communicationClarity: Math.round(totals.communicationClarity / count),
     completeness: Math.round(totals.completeness / count),
     problemSolving: Math.round(totals.problemSolving / count),
-    codeQuality: Math.round(totals.codeQuality / count),
+    codeQuality: Math.round((totals.codeQuality === "N/A" ? 0 : totals.codeQuality) / count),
     implementationSpecificity: Math.round(totals.implementationSpecificity / count),
     tradeOffAwareness: Math.round(totals.tradeOffAwareness / count),
     technicalVocabulary: Math.round(totals.technicalVocabulary / count),
@@ -357,6 +357,7 @@ export async function processAnswer(
       confidence: 50,
       overall: 50,
       codeQuality: 60,
+      codeQualityAssessed: false,
       implementationSpecificity: 50,
       tradeOffAwareness: 50,
       technicalVocabulary: 50,
@@ -433,7 +434,8 @@ export async function processAnswer(
   ) as DifficultyLevel;
 
   const topicScore =
-    (session.currentTopic.score * session.currentTopic.questionsAsked +
+    ((typeof session.currentTopic.score === "number" ? session.currentTopic.score : 0) *
+      session.currentTopic.questionsAsked +
       evaluation.overall) /
     (session.currentTopic.questionsAsked + 1);
   updated.currentTopic = {
@@ -803,83 +805,8 @@ export function generateReport(session: InterviewSession): InterviewReport {
     ...(session.isComplete ? [] : [session.currentTopic]),
   ];
 
-  const topicBreakdown = allTopicCoverages.map((tc) => ({
-    topic: tc.topicTitle,
-    day: tc.dayTitle && tc.dayTitle !== tc.topicTitle ? tc.dayTitle : `Day ${tc.day}`,
-    score: Math.round(tc.score),
-    objectivesCovered: tc.objectivesCovered.length,
-  }));
-
-  const avgScore = session.score;
-  const scoreBreakdown = averageBreakdown(session.evaluations);
-  const skippedTopics = session.candidateProfile.skippedTopics
-    .map((s) => {
-      const info = getTopicById(session.curriculum, s.topicId);
-      return info?.topic.title;
-    })
-    .filter(Boolean) as string[];
-
-  const weakSignals = session.candidateProfile.learningSignals
-    .filter((s) => s.strength === "weak")
-    .map((s) => {
-      const info = getTopicById(session.curriculum, s.topicId);
-      return info?.topic.title;
-    })
-    .filter(Boolean) as string[];
-
-  const recommendations: string[] = [];
-  if (avgScore < 60) {
-    recommendations.push("Review foundational concepts before advancing to complex topics");
-  }
-  if (session.weaknesses.some((w) => w.includes("depth"))) {
-    recommendations.push("Practice explaining technical concepts with real-world examples");
-  }
-  if (session.weaknesses.some((w) => w.includes("Communication"))) {
-    recommendations.push("Structure answers using problem → approach → trade-offs → conclusion");
-  }
-  if (skippedTopics.length > 0) {
-    recommendations.push(`Complete skipped topics: ${skippedTopics.join(", ")}`);
-  }
-  recommendations.push("Continue building projects that apply curriculum concepts in production-like scenarios");
-
-  const nextTopicsToReview = [
-    ...weakSignals,
-    ...skippedTopics,
-    ...topicBreakdown.filter((t) => t.score < 60).map((t) => t.topic),
-  ].filter((v, i, a) => a.indexOf(v) === i).slice(0, 5);
-
-  const communicationAvg =
-    session.evaluations.reduce((s, e) => s + e.communication, 0) /
-    Math.max(session.evaluations.length, 1);
-
-  let communicationFeedback: string;
-  if (communicationAvg >= 80) {
-    communicationFeedback =
-      "Excellent communication throughout the interview. Responses were well-structured and easy to follow.";
-  } else if (communicationAvg >= 60) {
-    communicationFeedback =
-      "Good communication overall. Consider using more concrete examples and clearer structure in longer answers.";
-  } else {
-    communicationFeedback =
-      "Communication needs improvement. Practice organizing thoughts before responding and use specific examples.";
-  }
-
-  const interviewSummary = `Interview covered ${topicBreakdown.length} topic areas across ${session.questionNumber} questions. Overall performance scored ${avgScore}/100 with difficulty adapted from ${getInitialDifficulty(session.candidateProfile)} to ${session.difficulty}. ${
-    avgScore >= 75
-      ? "The candidate demonstrated strong readiness for advanced topics."
-      : avgScore >= 55
-        ? "The candidate shows promise with areas identified for focused improvement."
-        : "The candidate would benefit from additional study before advancing."
-  }`;
-
-  export function generateReport(session: InterviewSession): InterviewReport {
-  const allTopicCoverages = [
-    ...session.topicCoverages,
-    ...(session.isComplete ? [] : [session.currentTopic]),
-  ];
-
   const topicBreakdown = allTopicCoverages.map((tc) => {
-    let masteryStatus: "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED";
+    let masteryStatus: "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED" | "IN_PROGRESS";
     let score: number | "N/A";
     
     if (tc.masteryStatus) {
@@ -894,8 +821,8 @@ export function generateReport(session: InterviewSession): InterviewReport {
       masteryStatus = "ASSESSED";
     }
 
-    if (masteryStatus === "ASSESSED") {
-      score = Math.round(tc.score);
+    if (masteryStatus === "ASSESSED" || masteryStatus === "IN_PROGRESS") {
+      score = typeof tc.score === "number" ? Math.round(tc.score) : "N/A";
     } else {
       score = "N/A";
     }
@@ -990,36 +917,7 @@ export function generateReport(session: InterviewSession): InterviewReport {
     scoreBreakdown,
     strengths: session.strengths,
     weaknesses: session.weaknesses,
-    topicBreakdown: allTopicCoverages.map((tc) => {
-      let masteryStatus: "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED";
-      let score: number | "N/A";
-      
-      if (tc.masteryStatus) {
-        masteryStatus = tc.masteryStatus;
-      } else if (session.skippedQuestions.some(sq => sq.topic === tc.topicTitle)) {
-        masteryStatus = "SKIPPED";
-      } else if (tc.questionsAsked === 0) {
-        masteryStatus = "NOT_STARTED";
-      } else if (tc.questionsAsked > 0 && tc.objectivesCovered.length === 0) {
-        masteryStatus = "INSUFFICIENT_EVIDENCE";
-      } else {
-        masteryStatus = "ASSESSED";
-      }
-
-      if (masteryStatus === "ASSESSED") {
-        score = Math.round(tc.score);
-      } else {
-        score = "N/A";
-      }
-
-      return {
-        topic: tc.topicTitle,
-        day: tc.dayTitle && tc.dayTitle !== tc.topicTitle ? tc.dayTitle : `Day ${tc.day}`,
-        score,
-        masteryStatus,
-        objectivesCovered: tc.objectivesCovered.length,
-      };
-    }),
+    topicBreakdown,
     interviewSummary,
     recommendations: [...new Set(recommendations)],
     nextTopicsToReview,
@@ -1029,7 +927,6 @@ export function generateReport(session: InterviewSession): InterviewReport {
     conversationHistory: session.conversationHistory,
     learningAgility: session.learningAgility,
   };
-}
 }
 
 export function endInterview(session: InterviewSession): InterviewReport {

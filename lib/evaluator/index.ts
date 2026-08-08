@@ -256,7 +256,7 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
       communication * weights.communicationClarity +
       completeness * weights.completeness +
       problemSolving * weights.problemSolving +
-      (codeQuality === "N/A" ? 0 : codeQuality * weights.codeQuality) +
+      (codeQuality === "N/A" ? 0 : codeQuality * (weights.codeQuality ?? 0)) +
       depth.implementationSpecificity * weights.implementationSpecificity +
       depth.tradeOffAwareness * weights.tradeOffAwareness +
       depth.technicalVocabulary * weights.technicalVocabulary +
@@ -328,7 +328,6 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     learningAgility,
     honestyCredit,
     responseType,
-    codeQualityAssessed,
   };
 }
 
@@ -457,6 +456,7 @@ function handleControlIntent(
     communication: assessCommunication(""),
     confidence: 50,
     codeQuality: 0,
+    codeQualityAssessed: false,
     implementationSpecificity: 0,
     tradeOffAwareness: 0,
     technicalVocabulary: 0,

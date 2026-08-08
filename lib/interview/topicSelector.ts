@@ -83,6 +83,7 @@ export function selectNextTopic(
     dayTitle: selected.dayTitle,
     objectivesCovered: [],
     score: 0,
+    masteryStatus: "IN_PROGRESS",
     questionsAsked: 0,
   };
 }

@@ -18,7 +18,7 @@ interface InterviewScreenProps {
   onSkipQuestion: () => void;
 }
 
-const QUESTION_SECONDS = 120;
+const QUESTION_SECONDS = 240;
 
 function formatTime(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / 60);

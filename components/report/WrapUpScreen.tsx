@@ -36,12 +36,15 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const overallScore = report.overallScore;
   const scoreColor =
-    report.overallScore >= 75
-      ? "text-success"
-      : report.overallScore >= 55
-        ? "text-warning"
-      : "text-error";
+    typeof overallScore !== "number"
+      ? "text-slate-400"
+      : overallScore >= 75
+        ? "text-success"
+        : overallScore >= 55
+          ? "text-warning"
+          : "text-error";
   const scoreRows = [
     ["Technical Accuracy", report.scoreBreakdown.technicalAccuracy],
     ["Communication Clarity", report.scoreBreakdown.communicationClarity],
@@ -78,7 +81,7 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
             <span className="text-2xl text-slate-400">/100</span>
           </p>
           <Progress
-            value={report.overallScore}
+            value={typeof overallScore === "number" ? overallScore : 0}
             className="mx-auto mt-4 max-w-md h-2"
           />
           {typeof report.learningAgility === "number" && (
@@ -168,14 +171,16 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
                     <td className="py-3 pr-4">
                       <span
                         className={
-                          t.score >= 70
-                            ? "text-success"
-                            : t.score >= 50
-                              ? "text-warning"
-                              : "text-error"
+                          typeof t.score === "number"
+                            ? t.score >= 70
+                              ? "text-success"
+                              : t.score >= 50
+                                ? "text-warning"
+                                : "text-error"
+                            : "text-slate-400"
                         }
                       >
-                        {t.score}/100
+                        {typeof t.score === "number" ? `${t.score}/100` : "N/A"}
                       </span>
                     </td>
                     <td className="py-3 text-slate-300">{t.objectivesCovered}</td>
