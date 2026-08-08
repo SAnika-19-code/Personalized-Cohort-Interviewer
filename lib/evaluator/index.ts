@@ -12,13 +12,59 @@ interface EvaluateParams {
   responseAnalysis?: import("@/lib/interview/responseAnalyzer").CandidateResponseAnalysis;
 }
 
-function normalizeText(text: string): string {
-  return text.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+const normalizeText = (text: string): string =>
+  text.toLowerCase().replace(/[^\w\s]/g, " ").replace(/\s+/g, " ").trim();
+
+const DOMAIN_SYNONYMS: Record<string, string[]> = {
+  healthcare: ["medical", "clinical", "patient", "hospital", "health"],
+  datasets: ["data", "dataset", "records", "tables", "tabular"],
+  dataset: ["data", "datasets", "records", "tables"],
+  data: ["datasets", "dataset", "records", "tabular", "database"],
+  embeddings: ["embedding", "embed", "vector", "vectors"],
+  embedding: ["embeddings", "embed", "vector", "vectors"],
+  vector: ["vectors", "embedding", "embeddings"],
+  vectors: ["vector", "embedding", "embeddings"],
+  database: ["databases", "db", "storage", "store"],
+  databases: ["database", "db", "storage"],
+  applications: ["application", "app", "apps", "use case"],
+  application: ["applications", "app", "use case"],
+  comparison: ["compare", "comparing", "versus", "vs"],
+  local: ["locally", "on-premise", "offline"],
+  managed: ["cloud", "hosted", "saas", "service"],
+  chroma: ["chromadb"],
+  pinecone: ["pinecone"],
+  synthetic: ["synthetically", "fake", "mock", "generated", "artificial"],
+  privacy: ["confidential", "hipaa", "pii", "anonymized", "de-identified"],
+  schema: ["schemas", "structure", "model", "modeling"],
+  ingestion: ["ingest", "load", "import", "pipeline"],
+  retrieval: ["retrieve", "fetch", "search", "query"],
+  chunking: ["chunk", "chunks", "split", "splitting", "segment"],
+};
+
+function keywordMatchesAnswer(keyword: string, answerWords: string[]): boolean {
+  const kw = keyword.toLowerCase();
+
+  for (const word of answerWords) {
+    if (word.length < 3) continue;
+
+    if (word === kw) return true;
+
+    if (word.includes(kw) || kw.includes(word)) return true;
+
+    const synonyms = DOMAIN_SYNONYMS[kw];
+    if (synonyms && synonyms.includes(word)) return true;
+
+    const wordSynonyms = DOMAIN_SYNONYMS[word];
+    if (wordSynonyms && wordSynonyms.includes(kw)) return true;
+  }
+
+  return false;
 }
 
 function countKeywordMatches(text: string, keywords: string[]): number {
   const normalized = normalizeText(text);
-  return keywords.filter((kw) => normalized.includes(kw.toLowerCase())).length;
+  const answerWords = normalized.split(/\s+/).filter((w) => w.length >= 3);
+  return keywords.filter((kw) => keywordMatchesAnswer(kw, answerWords)).length;
 }
 
 function assessLength(answer: string): number {
