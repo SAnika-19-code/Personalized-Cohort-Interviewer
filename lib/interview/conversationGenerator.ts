@@ -9,6 +9,7 @@ interface ConversationContext {
   analysis: CandidateResponseAnalysis;
   candidateAnswer: string;
   currentTopic: CurriculumDay & { id: string };
+  currentObjectiveId?: string;
   nextTopicTitle?: string;
   nextTopicDay?: number;
   profile: CandidateProfile;
@@ -120,10 +121,20 @@ function normalizeQuestion(text: string): string {
   return stripped.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
+function getObjective(context: ConversationContext) {
+  const objs = context.currentTopic.learningObjectives ?? [];
+  if (context.currentObjectiveId) {
+    const found = objs.find((o) => o.id === context.currentObjectiveId);
+    if (found) return found;
+  }
+  return objs[0];
+}
+
 function buildFollowUpQuestion(context: ConversationContext, focus: string): string {
   const { currentTopic, candidateAnswer, analysis, difficulty, profile } = context;
   const topicTitle = currentTopic.title;
-  const keywords = analysis.missingConcepts.length > 0 ? analysis.missingConcepts : currentTopic.learningObjectives[0]?.keywords ?? [];
+  const objective = getObjective(context);
+  const keywords = analysis.missingConcepts.length > 0 ? analysis.missingConcepts : objective?.keywords ?? [];
 
   const templates = FOLLOW_UP_TEMPLATES[focus] ?? FOLLOW_UP_TEMPLATES.deeper_exploration;
   const template = pickRandom(templates);
@@ -136,7 +147,7 @@ function buildFollowUpQuestion(context: ConversationContext, focus: string): str
     const keyword = pickRandom(keywords) ?? "the core concept";
     question = `You mentioned ${keyword}. How would you handle edge cases or scaling concerns for this in a production environment?`;
   } else if (focus === "foundational_understanding") {
-    const obj = currentTopic.learningObjectives[0];
+    const obj = objective ?? currentTopic.learningObjectives[0];
     question = `In simple terms, how would you explain ${obj?.description.toLowerCase() ?? "this concept"} to a junior developer?`;
   } else if (focus === "reasoning_process" || focus === "elaboration") {
     question = `Walk me through your reasoning step by step. What led you to that conclusion?`;
@@ -144,7 +155,7 @@ function buildFollowUpQuestion(context: ConversationContext, focus: string): str
     const concept = analysis.missingConcepts[0] ?? "the key concept";
     question = `Let's focus on ${concept}. How does this fit into the overall picture?`;
   } else if (focus === "rephrased_question") {
-    const obj = currentTopic.learningObjectives[0];
+    const obj = objective ?? currentTopic.learningObjectives[0];
     const simpleKeyword = obj?.keywords?.[0] ?? analysis.missingConcepts[0] ?? "this concept";
     const gerund = toGerund(obj?.description ?? "this concept");
     question = `Let me break it down. When we talk about ${gerund}, I want to know: how would you work with ${simpleKeyword} in practice, and what does it do?`;
@@ -216,9 +227,9 @@ function buildTransitionQuestion(context: ConversationContext): string {
   const template = pickRandom(TRANSITION_TEMPLATES);
   const transition = template.replace("{nextTopic}", `Day ${nextTopicDay} — ${nextTopicTitle}`);
 
-  const firstObjective = currentTopic.learningObjectives[0];
-  const openingQuestion = firstObjective
-    ? `To start, can you walk me through ${toGerund(firstObjective.description)}?`
+  const objective = getObjective(context) ?? currentTopic.learningObjectives[0];
+  const openingQuestion = objective
+    ? `To start, can you walk me through ${toGerund(objective.description)}?`
     : `To start, could you give me an overview of ${nextTopicTitle}?`;
 
   return `${transition}\n\n${openingQuestion}`;
@@ -242,8 +253,8 @@ function buildCorrectionQuestion(context: ConversationContext): string {
 
 function buildTeachingQuestion(context: ConversationContext): string {
   const { analysis, currentTopic, selectedStyle } = context;
-  const obj = currentTopic.learningObjectives[0];
-  const gerund = toGerund(obj?.description ?? "this concept");
+  const objective = getObjective(context) ?? currentTopic.learningObjectives[0];
+  const gerund = toGerund(objective?.description ?? "this concept");
 
   if (selectedStyle === "easy") {
     return `Now that I've explained the basics, let me ask something simpler: In your own words, can you walk me through ${gerund}?`;

@@ -398,3 +398,33 @@ Welcome judges! This file covers the eleventh iteration of our "vibe coding" wor
 
 ---
 
+# 🤖 Vibe Coding Manifest: AI Technical Interviewer (Phase 1 — Evaluation Context Binding Implementation)
+
+Welcome judges! This file covers the twelfth iteration of our "vibe coding" workflow, focusing on the strict implementation of Phase 1 Evaluation Context Binding. This ensures uncompromising integrity between question generation, objective mapping, and evaluation scoring.
+
+---
+
+## 18. Phase 1 Evaluation-Context Integrity & Strict Binding Fix
+*Prompts, requirements, and validation test suites enforcing strict question-to-objective tracking without drift or independent re-inference.*
+
+> **Prompt:**
+> ```text
+> Implement Phase 1 Evaluation-Context Integrity fixes to guarantee that every candidate response is evaluated against the exact question and objective that produced it, without drift or independent re-inference:
+> 
+> 1. Strict Context Integrity Pipeline:
+>    - Enforce the immutable evaluation relationship chain: questionId -> topicId -> objectiveId -> rubric/model-answer context -> candidate response -> evaluator.
+>    - Ensure candidate responses retain exact question IDs and the evaluator receives exact associated contexts without searching, inferring, or regenerating objectives from the curriculum.
+> 
+> 2. Validation & Safety Guards:
+>    - Add explicit runtime validation before evaluation ensuring response.questionId matches current questionId, question.topicId matches evaluation topicId, and question.objectiveId matches evaluation objectiveId.
+>    - Fail safely with structured diagnostic logging on any context mismatch rather than silently scoring against the wrong objective.
+> 
+> 3. Preservation & Regression Testing:
+>    - Preserve all previous evaluator improvements (conceptual coverage, fuzzy/synonym matching, topic-type-aware model answers, etc.) without altering scoring formulas.
+>    - Implement Test A, Test B, Test C, and Test D regression test suites to prove strict objective isolation across multi-turn questions, same-topic distinct objectives, and distinct vector store requirements.
+> ```
+
+---
+
+---
+

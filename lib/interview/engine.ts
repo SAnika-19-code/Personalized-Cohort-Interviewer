@@ -554,6 +554,7 @@ export async function processAnswer(
         title: nextTopic.topicTitle,
         learningObjectives: [],
       },
+    currentObjectiveId: nextObjectiveId,
     nextTopicTitle: transitioned ? nextTopic.topicTitle : undefined,
     nextTopicDay: transitioned ? nextTopic.day : undefined,
     profile: session.candidateProfile,
