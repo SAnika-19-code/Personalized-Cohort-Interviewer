@@ -84,6 +84,13 @@ export interface ChatMessage {
   questionId?: string;
   objectiveId?: string;
   kind?: "question" | "hint" | "system" | "answer";
+  submittedLength?: number;
+  receivedLength?: number;
+  storedLength?: number;
+  retrievedLength?: number;
+  evaluatedLength?: number;
+  reportedLength?: number;
+  rawContent?: string;
 }
 
 export interface ScoreBreakdown {
@@ -91,7 +98,7 @@ export interface ScoreBreakdown {
   communicationClarity: number;
   completeness: number;
   problemSolving: number;
-  codeQuality: number;
+  codeQuality: number | "N/A";
   implementationSpecificity: number;
   tradeOffAwareness: number;
   technicalVocabulary: number;
@@ -105,7 +112,7 @@ export interface EvaluationResult {
   reasoning: number;
   communication: number;
   confidence: number;
-  codeQuality: number;
+  codeQuality: number | "N/A";
   implementationSpecificity: number;
   tradeOffAwareness: number;
   technicalVocabulary: number;
@@ -121,6 +128,7 @@ export interface EvaluationResult {
   learningAgility?: number;
   responseType?: string;
   honestyCredit?: number;
+  codeQualityAssessed: boolean;
 }
 
 export interface QuestionReview {
@@ -135,13 +143,16 @@ export interface QuestionReview {
   evaluation?: EvaluationResult;
 }
 
+export type TopicMasteryStatus = "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED";
+
 export interface TopicCoverage {
   topicId: string;
   day: number;
   topicTitle: string;
   dayTitle: string;
   objectivesCovered: string[];
-  score: number;
+  score: number | "N/A";
+  masteryStatus: TopicMasteryStatus;
   questionsAsked: number;
 }
 
@@ -186,14 +197,15 @@ export interface InterviewReport {
   date: string;
   interviewTimestamp: string;
   selectedDifficulty: InterviewStyle;
-  overallScore: number;
+  overallScore: number | "N/A";
   scoreBreakdown: ScoreBreakdown;
   strengths: string[];
   weaknesses: string[];
   topicBreakdown: {
     topic: string;
     day: string;
-    score: number;
+    score: number | "N/A";
+    masteryStatus: "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED";
     objectivesCovered: number;
   }[];
   interviewSummary: string;

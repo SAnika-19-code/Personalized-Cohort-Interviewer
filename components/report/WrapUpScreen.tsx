@@ -103,9 +103,9 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
               <div key={label}>
                 <div className="mb-1 flex items-center justify-between text-sm">
                   <span className="text-slate-300">{label}</span>
-                  <span className="font-medium text-white">{score}/100</span>
+                  <span className="font-medium text-white">{typeof score === "number" ? `${score}/100` : score}</span>
                 </div>
-                <Progress value={score} className="h-2" />
+                {typeof score === "number" && <Progress value={score} className="h-2" />}
               </div>
             ))}
           </div>

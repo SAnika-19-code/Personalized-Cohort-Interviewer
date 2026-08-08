@@ -95,9 +95,9 @@ function assessCommunication(answer: string): number {
   return Math.min(100, score);
 }
 
-function assessCodeQuality(answer: string): number {
+function assessCodeQuality(answer: string): number | "N/A" {
   const hasCode = /```[\s\S]*?```|`[^`]+`|function|class|def |const |let |import |select /i.test(answer);
-  if (!hasCode) return 0;
+  if (!hasCode) return "N/A";
 
   let score = 45;
   if (/```(python|py|javascript|js|typescript|ts|json|sql|bash|sh)?/i.test(answer)) score += 15;
@@ -151,6 +151,7 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
   const lengthScore = assessLength(answer);
   const communication = assessCommunication(answer);
   const codeQuality = assessCodeQuality(answer);
+  const codeQualityAssessed = codeQuality !== "N/A";
 
   const responseType = responseAnalysis?.responseType ?? "UNKNOWN";
   const isHonestUnknown = responseType === "DOES_NOT_KNOW" || responseType === "DID_NOT_UNDERSTAND";
@@ -245,14 +246,21 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
 
   const modelAnswer = generateDomainModelAnswer(topic, { id: objectiveId, description: objective?.description ?? "", keywords }, answer);
 
+  const codeQualityWeight = codeQuality === "N/A" ? 0 : 0.05;
+  const weights = codeQuality === "N/A"
+    ? { technicalAccuracy: 0.30, communicationClarity: 0.10, completeness: 0.15, problemSolving: 0.15, implementationSpecificity: 0.15, tradeOffAwareness: 0.10, technicalVocabulary: 0.10, structuralQuality: 0.10 }
+    : { technicalAccuracy: 0.25, communicationClarity: 0.10, completeness: 0.15, problemSolving: 0.15, codeQuality: 0.05, implementationSpecificity: 0.15, tradeOffAwareness: 0.10, technicalVocabulary: 0.10, structuralQuality: 0.10 };
+  
   const overall = Math.round(
-    conceptualCoverage * 0.30 +
-      depth.technicalVocabulary * 0.15 +
-      problemSolving * 0.15 +
-      completeness * 0.15 +
-      communication * 0.10 +
-      depth.structuralQuality * 0.10 +
-      depthScore * 0.05
+    conceptualCoverage * weights.technicalAccuracy +
+      communication * weights.communicationClarity +
+      completeness * weights.completeness +
+      problemSolving * weights.problemSolving +
+      (codeQuality === "N/A" ? 0 : codeQuality * weights.codeQuality) +
+      depth.implementationSpecificity * weights.implementationSpecificity +
+      depth.tradeOffAwareness * weights.tradeOffAwareness +
+      depth.technicalVocabulary * weights.technicalVocabulary +
+      depth.structuralQuality * weights.structuralQuality
   );
 
   const isCorrect = overall >= 55 && conceptualCoverage >= 45;
@@ -293,7 +301,8 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     reasoning,
     communication,
     confidence,
-    codeQuality,
+    codeQuality: codeQuality === "N/A" ? "N/A" : codeQuality,
+    codeQualityAssessed,
     implementationSpecificity: depth.implementationSpecificity,
     tradeOffAwareness: depth.tradeOffAwareness,
     technicalVocabulary: depth.technicalVocabulary,
@@ -304,7 +313,7 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
       communicationClarity: communication,
       completeness,
       problemSolving,
-      codeQuality,
+      codeQuality: codeQuality === "N/A" ? "N/A" : codeQuality,
       implementationSpecificity: depth.implementationSpecificity,
       tradeOffAwareness: depth.tradeOffAwareness,
       technicalVocabulary: depth.technicalVocabulary,
@@ -319,6 +328,7 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     learningAgility,
     honestyCredit,
     responseType,
+    codeQualityAssessed,
   };
 }
 

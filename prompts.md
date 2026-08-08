@@ -462,3 +462,41 @@ Welcome judges! This file covers the thirteenth iteration of our "vibe coding" w
 
 ---
 
+# 🤖 Vibe Coding Manifest: AI Technical Interviewer (Phase 3 — Candidate Answer Integrity & Report Accuracy)
+
+Welcome judges! This file covers the fourteenth and final iteration of our "vibe coding" workflow, detailing the implementation of Phase 3 Candidate Answer Integrity and Report Accuracy. This phase guarantees lossless raw text preservation, correct handling of unassessed dimensions (such as Code Quality N/A), deterministic overall scoring, and accurate status reporting for skipped topics.
+
+---
+
+## 20. Phase 3 Candidate Answer Integrity & Report Accuracy
+*Prompts and architectural updates ensuring lossless answer persistence, proper N/A handling for unassessed dimensions, deterministic scoring aggregation, and pristine report reporting for skipped/unassessed curriculum topics.*
+
+> **Prompt:**
+> ```text
+> Implement Phase 3 Candidate Answer Integrity and Report Accuracy enhancements to eliminate text truncation, incorrect score penalties, and reporting flaws without redesigning the core evaluator:
+> 
+> 1. Part 1 — Candidate Answer Integrity & Lossless Persistence:
+>    - Trace and secure the full path from frontend input -> submission -> API -> persistence -> interview state -> evaluator -> report.
+>    - Eliminate truncation bugs (e.g., "cosine similarit") by instrumenting the pipeline with diagnostic tracking (submittedLength, receivedLength, storedLength, retrievedLength, evaluatedLength, reportedLength).
+>    - Guarantee that original raw candidate answers are preserved and displayed in the final report, rather than summarized or evaluator-normalized strings.
+> 
+> 2. Part 2 — Unassessed Dimensions Handling:
+>    - Ensure dimensions like Code Quality default to N/A when no meaningful coding assessment occurs.
+>    - Prevent NOT_ASSESSED states from being falsely converted into artificial low scores (0 or 5) and exclude unassessed categories from overall score denominator aggregations.
+> 
+> 3. Part 3 — Deterministic Overall Scoring & Topic Mastery:
+>    - Inspect and secure the scoring aggregation logic to ensure final overall scores are strictly deterministic based on existing component weights.
+>    - Implement clean lifecycle handling for topic mastery: SKIPPED and INSUFFICIENT_EVIDENCE map to N/A, while ASSESSED topics receive actual calculated scores.
+> 
+> 4. Part 4 — Evidence-Based Recommendations & Skipped Topic Integrity:
+>    - Ensure recommendations are strictly derived from assessed evidence.
+>    - Prevent skipped topics from being flagged as knowledge weaknesses in the summary; instead, correctly report them as "Skipped by candidate" rather than "Weak knowledge", and ensure insufficient evidence is never misclassified as incorrect.
+> 
+> 5. Regression Testing:
+>    - Add comprehensive test suites verifying long answer preservation, raw text integrity, exclusion of unassessed metrics from overall scores, correct N/A scoring for skipped topics, and evidence-based recommendation generation.
+> ```
+
+---
+
+---
+

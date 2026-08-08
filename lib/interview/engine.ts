@@ -108,22 +108,26 @@ function averageBreakdown(evaluations: EvaluationResult[]): ScoreBreakdown {
     structuralQuality: 0,
   };
   const totals = evaluations.reduce<ScoreBreakdown>(
-    (acc, evaluation) => ({
-      technicalAccuracy:
-        acc.technicalAccuracy + evaluation.scoreBreakdown.technicalAccuracy,
-      communicationClarity:
-        acc.communicationClarity + evaluation.scoreBreakdown.communicationClarity,
-      completeness: acc.completeness + evaluation.scoreBreakdown.completeness,
-      problemSolving: acc.problemSolving + evaluation.scoreBreakdown.problemSolving,
-      codeQuality: acc.codeQuality + evaluation.scoreBreakdown.codeQuality,
-      implementationSpecificity:
-        acc.implementationSpecificity + (evaluation.scoreBreakdown.implementationSpecificity ?? 0),
-      tradeOffAwareness:
-        acc.tradeOffAwareness + (evaluation.scoreBreakdown.tradeOffAwareness ?? 0),
-      technicalVocabulary:
-        acc.technicalVocabulary + (evaluation.scoreBreakdown.technicalVocabulary ?? 0),
-      structuralQuality:
-        acc.structuralQuality + (evaluation.scoreBreakdown.structuralQuality ?? 0),
+    (acc, evaluation) => {
+      const sb = evaluation.scoreBreakdown;
+      const codeQualityValue = sb.codeQuality === "N/A" ? 0 : (sb.codeQuality as number);
+      return {
+        technicalAccuracy:
+          acc.technicalAccuracy + evaluation.scoreBreakdown.technicalAccuracy,
+        communicationClarity:
+          acc.communicationClarity + evaluation.scoreBreakdown.communicationClarity,
+        completeness: acc.completeness + evaluation.scoreBreakdown.completeness,
+        problemSolving: acc.problemSolving + evaluation.scoreBreakdown.problemSolving,
+        codeQuality: acc.codeQuality + codeQualityValue,
+        implementationSpecificity:
+          acc.implementationSpecificity + (evaluation.scoreBreakdown.implementationSpecificity ?? 0),
+        tradeOffAwareness:
+          acc.tradeOffAwareness + (evaluation.scoreBreakdown.tradeOffAwareness ?? 0),
+        technicalVocabulary:
+          acc.technicalVocabulary + (evaluation.scoreBreakdown.technicalVocabulary ?? 0),
+        structuralQuality:
+          acc.structuralQuality + (evaluation.scoreBreakdown.structuralQuality ?? 0),
+      };
     }),
     zero
   );
@@ -442,6 +446,7 @@ export async function processAnswer(
         ...evaluation.objectivesAssessed,
       ]),
     ],
+    masteryStatus: (session.currentTopic.objectivesCovered.length + evaluation.objectivesAssessed.length >= (topic?.learningObjectives?.length ?? 0)) ? "ASSESSED" : "IN_PROGRESS",
   };
 
   const allScores = updated.evaluations.map((e) => e.overall);
@@ -590,7 +595,11 @@ export async function processAnswer(
   updated.questionNumber = session.questionNumber + 1;
 
   if (transitioned) {
-    updated.currentTopic = { ...nextTopic, questionsAsked: 1 };
+updated.currentTopic = { 
+    ...nextTopic, 
+    questionsAsked: 1,
+    masteryStatus: "IN_PROGRESS",
+  };
   }
 
   updated.conversationHistory = [
@@ -674,7 +683,11 @@ export async function skipQuestion(session: InterviewSession): Promise<{
     skipTokensRemaining: session.skipTokensRemaining - 1,
     skippedQuestions: [...session.skippedQuestions, skipped],
     questionReviews: [...session.questionReviews, skipped],
-    topicCoverages: [...session.topicCoverages, session.currentTopic],
+    topicCoverages: session.topicCoverages.map(tc => 
+      tc.topicId === session.currentTopic.topicId 
+        ? { ...tc, masteryStatus: "SKIPPED" as const, score: "N/A" as const }
+        : tc
+    ),
     conversationHistory: [
       ...session.conversationHistory,
       createMessage("candidate", "[Skipped question]", {
@@ -859,17 +872,154 @@ export function generateReport(session: InterviewSession): InterviewReport {
         : "The candidate would benefit from additional study before advancing."
   }`;
 
+  export function generateReport(session: InterviewSession): InterviewReport {
+  const allTopicCoverages = [
+    ...session.topicCoverages,
+    ...(session.isComplete ? [] : [session.currentTopic]),
+  ];
+
+  const topicBreakdown = allTopicCoverages.map((tc) => {
+    let masteryStatus: "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED";
+    let score: number | "N/A";
+    
+    if (tc.masteryStatus) {
+      masteryStatus = tc.masteryStatus;
+    } else if (session.skippedQuestions.some(sq => sq.topic === tc.topicTitle)) {
+      masteryStatus = "SKIPPED";
+    } else if (tc.questionsAsked === 0) {
+      masteryStatus = "NOT_STARTED";
+    } else if (tc.questionsAsked > 0 && tc.objectivesCovered.length === 0) {
+      masteryStatus = "INSUFFICIENT_EVIDENCE";
+    } else {
+      masteryStatus = "ASSESSED";
+    }
+
+    if (masteryStatus === "ASSESSED") {
+      score = Math.round(tc.score);
+    } else {
+      score = "N/A";
+    }
+
+    return {
+      topic: tc.topicTitle,
+      day: tc.dayTitle && tc.dayTitle !== tc.topicTitle ? tc.dayTitle : `Day ${tc.day}`,
+      score,
+      masteryStatus,
+      objectivesCovered: tc.objectivesCovered.length,
+    };
+  });
+
+  const avgScore = session.score;
+  const scoreBreakdown = averageBreakdown(session.evaluations);
+  
+  // Track skipped topics from interview (not pre-existing skips)
+  const skippedTopicsFromInterview = session.questionReviews
+    .filter(qr => qr.skipped)
+    .map(qr => qr.topic)
+    .filter((v, i, a) => a.indexOf(v) === i);
+  
+  const preExistingSkippedTopics = session.candidateProfile.skippedTopics
+    .map((s) => {
+      const info = getTopicById(session.curriculum, s.topicId);
+      return info?.topic.title;
+    })
+    .filter(Boolean) as string[];
+
+  const weakSignals = session.candidateProfile.learningSignals
+    .filter((s) => s.strength === "weak")
+    .map((s) => {
+      const info = getTopicById(session.curriculum, s.topicId);
+      return info?.topic.title;
+    })
+    .filter(Boolean) as string[];
+
+  const recommendations: string[] = [];
+  if (session.score < 60) {
+    recommendations.push("Review foundational concepts before advancing to complex topics");
+  }
+  if (session.weaknesses.some((w) => w.includes("depth"))) {
+    recommendations.push("Practice explaining technical concepts with real-world examples");
+  }
+  if (session.weaknesses.some((w) => w.includes("Communication"))) {
+    recommendations.push("Structure answers using problem → approach → trade-offs → conclusion");
+  }
+  if (session.skippedQuestions.length > 0) {
+    recommendations.push(`Skipped topics should be revisited: ${session.skippedQuestions.map(q => q.topic).join(", ")}`);
+  }
+  recommendations.push("Continue building projects that apply curriculum concepts in production-like scenarios");
+
+  const nextTopicsToReview = [
+    ...session.questionReviews
+      .filter(qr => qr.evaluation && qr.evaluation && qr.evaluation.overall < 60)
+      .map(qr => qr.topic)
+      .filter((v, i, a) => a.indexOf(v) === i),
+    ...session.skippedQuestions.map(sq => sq.topic),
+  ].filter((v, i, a) => a.indexOf(v) === i).slice(0, 5);
+
+  const communicationAvg =
+    session.evaluations.reduce((s, e) => s + e.communication, 0) /
+    Math.max(session.evaluations.length, 1);
+
+  let communicationFeedback: string;
+  if (communicationAvg >= 80) {
+    communicationFeedback =
+      "Excellent communication throughout the interview. Responses were well-structured and easy to follow.";
+  } else if (communicationAvg >= 60) {
+    communicationFeedback =
+      "Good communication overall. Consider using more concrete examples and clearer structure in longer answers.";
+  } else {
+    communicationFeedback =
+      "Communication needs improvement. Practice organizing thoughts before responding and use specific examples.";
+  }
+
+  const interviewSummary = `Interview covered ${session.topicCoverages.filter(t => t.masteryStatus === "ASSESSED").length} assessed topic areas across ${session.questionNumber} questions. Overall performance scored ${session.score}/100 with difficulty adapted from ${getInitialDifficulty(session.candidateProfile)} to ${session.difficulty}. ${
+    session.score >= 75
+      ? "The candidate demonstrated strong readiness for advanced topics."
+      : session.score >= 55
+      ? "The candidate shows promise with areas identified for focused improvement."
+      : "The candidate would benefit from additional study before advancing."
+  }`;
+
   return {
     candidateId: session.candidateProfile.candidateId,
     candidateName: session.candidateProfile.name,
     date: new Date().toISOString().split("T")[0],
     interviewTimestamp: new Date().toISOString(),
     selectedDifficulty: session.selectedDifficulty,
-    overallScore: avgScore,
+    overallScore: session.score,
     scoreBreakdown,
     strengths: session.strengths,
     weaknesses: session.weaknesses,
-    topicBreakdown,
+    topicBreakdown: allTopicCoverages.map((tc) => {
+      let masteryStatus: "ASSESSED" | "SKIPPED" | "INSUFFICIENT_EVIDENCE" | "NOT_STARTED";
+      let score: number | "N/A";
+      
+      if (tc.masteryStatus) {
+        masteryStatus = tc.masteryStatus;
+      } else if (session.skippedQuestions.some(sq => sq.topic === tc.topicTitle)) {
+        masteryStatus = "SKIPPED";
+      } else if (tc.questionsAsked === 0) {
+        masteryStatus = "NOT_STARTED";
+      } else if (tc.questionsAsked > 0 && tc.objectivesCovered.length === 0) {
+        masteryStatus = "INSUFFICIENT_EVIDENCE";
+      } else {
+        masteryStatus = "ASSESSED";
+      }
+
+      if (masteryStatus === "ASSESSED") {
+        score = Math.round(tc.score);
+      } else {
+        score = "N/A";
+      }
+
+      return {
+        topic: tc.topicTitle,
+        day: tc.dayTitle && tc.dayTitle !== tc.topicTitle ? tc.dayTitle : `Day ${tc.day}`,
+        score,
+        masteryStatus,
+        objectivesCovered: tc.objectivesCovered.length,
+      };
+    }),
     interviewSummary,
     recommendations: [...new Set(recommendations)],
     nextTopicsToReview,
@@ -879,6 +1029,7 @@ export function generateReport(session: InterviewSession): InterviewReport {
     conversationHistory: session.conversationHistory,
     learningAgility: session.learningAgility,
   };
+}
 }
 
 export function endInterview(session: InterviewSession): InterviewReport {
