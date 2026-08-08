@@ -82,6 +82,7 @@ export interface ChatMessage {
   content: string;
   timestamp: number;
   questionId?: string;
+  objectiveId?: string;
   kind?: "question" | "hint" | "system" | "answer";
 }
 

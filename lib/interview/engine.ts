@@ -53,9 +53,36 @@ async function withFallback<T>(fn: () => Promise<T>, fallback: T | (() => T)): P
 function createMessage(
   role: ChatMessage["role"],
   content: string,
-  options: Pick<ChatMessage, "questionId" | "kind"> = {}
+  options: Pick<ChatMessage, "questionId" | "kind" | "objectiveId"> = {}
 ): ChatMessage {
   return { id: generateId(), role, content, timestamp: Date.now(), ...options };
+}
+
+interface QuestionContext {
+  questionId: string;
+  objectiveId: string;
+  objectiveDescription: string;
+  topicId: string;
+  difficulty: DifficultyLevel;
+}
+
+function findQuestionContext(
+  history: ChatMessage[],
+  currentQuestionId: string
+): QuestionContext | null {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const msg = history[i];
+    if (msg.kind === "question" && msg.questionId === currentQuestionId) {
+      return {
+        questionId: msg.questionId ?? currentQuestionId,
+        objectiveId: msg.objectiveId ?? "",
+        objectiveDescription: "",
+        topicId: "",
+        difficulty: 2 as DifficultyLevel,
+      };
+    }
+  }
+  return null;
 }
 
 function styleToDifficulty(
@@ -234,7 +261,7 @@ export function startInterview(
     createMessage("interviewer", opening, {
       kind: "system",
     }),
-    createMessage("interviewer", question, { questionId, kind: "question" }),
+    createMessage("interviewer", question, { questionId, kind: "question", objectiveId }),
   ];
 
   session.conversationHistory = messages;
@@ -267,13 +294,25 @@ export async function processAnswer(
 
   const topicData = getTopicById(session.curriculum, session.currentTopic.topicId);
   const topic = topicData?.topic;
-  const objectiveId =
-    session.currentObjectiveId || topic?.learningObjectives[0]?.id || "";
+
+  const questionCtx = findQuestionContext(session.conversationHistory, session.currentQuestionId);
+  const fallbackObjectiveId = topic?.learningObjectives[0]?.id ?? "";
+  let objectiveId = questionCtx?.objectiveId || session.currentObjectiveId || fallbackObjectiveId;
+
+  if (questionCtx && questionCtx.objectiveId && topic) {
+    const objectiveExists = topic.learningObjectives.some((o) => o.id === questionCtx.objectiveId);
+    if (!objectiveExists) {
+      console.warn(
+        `[Question-Objective Mismatch] questionId=${session.currentQuestionId} references objectiveId=${questionCtx.objectiveId} which does not exist in topic=${topic.title}. Falling back to session objective.`
+      );
+      objectiveId = session.currentObjectiveId || fallbackObjectiveId;
+    }
+  }
+
   const objective =
     topic?.learningObjectives.find((o) => o.id === objectiveId) ??
     topic?.learningObjectives[0];
 
-  // 1. Analyze the candidate's response for strategy
   const analysis = topic
     ? analyzeCandidateResponse({
         question: session.currentQuestion,
@@ -290,7 +329,6 @@ export async function processAnswer(
       })
     : null;
 
-  // 2. Evaluate the answer (with analysis context when available)
   let evaluation: EvaluationResult;
   if (topic) {
     evaluation = evaluateAnswer({
@@ -300,6 +338,11 @@ export async function processAnswer(
       difficulty: session.difficulty,
       responseAnalysis: analysis ?? undefined,
     });
+    if (questionCtx && evaluation.objectivesAssessed[0] !== objectiveId) {
+      console.warn(
+        `[Evaluation-Objective Mismatch] questionId=${session.currentQuestionId} expected objectiveId=${objectiveId} but evaluation assessed=${evaluation.objectivesAssessed[0]}`
+      );
+    }
   } else {
     evaluation = {
       conceptAccuracy: 50,
@@ -554,6 +597,7 @@ export async function processAnswer(
     createMessage("interviewer", interviewerMessage, {
       questionId: nextQuestionId,
       kind: "question",
+      objectiveId: nextObjectiveId,
     }),
   ];
 
@@ -733,6 +777,7 @@ export async function skipQuestion(session: InterviewSession): Promise<{
     createMessage("interviewer", interviewerMessage, {
       questionId,
       kind: "question",
+      objectiveId: nextObjectiveId,
     }),
   ];
 

@@ -369,3 +369,32 @@ Welcome judges! This file covers the tenth iteration of our "vibe coding" workfl
 
 ---
 
+# 🤖 Vibe Coding Manifest: AI Technical Interviewer (Question-Evaluation Binding & Objective Drift Fix)
+
+Welcome judges! This file covers the eleventh iteration of our "vibe coding" workflow, focusing on fixing objective drift during multi-turn follow-ups and question transitions. This critical fix guarantees that every candidate answer is evaluated strictly against the exact learning objective of the specific question asked, rather than a drifted state ID.
+
+---
+
+## 17. Question-Evaluation Binding & Objective Drift Fix
+*Prompts and implementation details solving state drift by binding evaluation context directly to chat messages and verifying objective consistency.*
+
+> **Prompt:**
+> ```text
+> Fix the question-evaluation binding bug caused by session.currentObjectiveId drifting from the actual question objective during multi-turn follow-ups and topic transitions:
+> 
+> 1. Message-Level Objective Binding:
+>    - Add objectiveId to the ChatMessage interface so that every generated question permanently carries its exact evaluation context.
+>    - Store the target objective explicitly alongside every question generated in startInterview, processAnswer, and skipQuestion.
+> 
+> 2. Context Extraction & Lookup (`findQuestionContext`):
+>    - Update the evaluation pipeline to look up the exact question being answered using its bound objectiveId rather than relying on drifted session state.
+>    - Implement invariant assertions: log warnings and fall back if a question references a non-existent objective, or log a mismatch if evaluation objectives do not align with the question's objectiveId.
+> 
+> 3. Verification:
+>    - Confirm through rigorous multi-turn testing (including skip paths) that evaluation.objectiveId perfectly matches the originating question's objectiveId across consecutive turns.
+> ```
+
+---
+
+---
+
