@@ -91,6 +91,10 @@ export interface ScoreBreakdown {
   completeness: number;
   problemSolving: number;
   codeQuality: number;
+  implementationSpecificity: number;
+  tradeOffAwareness: number;
+  technicalVocabulary: number;
+  structuralQuality: number;
 }
 
 export interface EvaluationResult {
@@ -101,9 +105,14 @@ export interface EvaluationResult {
   communication: number;
   confidence: number;
   codeQuality: number;
+  implementationSpecificity: number;
+  tradeOffAwareness: number;
+  technicalVocabulary: number;
+  structuralQuality: number;
   overall: number;
   scoreBreakdown: ScoreBreakdown;
   feedback: string;
+  modelAnswer: string;
   isCorrect: boolean;
   isPartial: boolean;
   misconception?: string;

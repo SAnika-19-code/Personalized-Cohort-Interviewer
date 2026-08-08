@@ -3,6 +3,8 @@ import type {
   EvaluationResult,
   DifficultyLevel,
 } from "@/types";
+import { assessDepth } from "./depth";
+import { generateDomainModelAnswer, formatModelAnswer, findMissingConcepts } from "./modelAnswer";
 
 interface EvaluateParams {
   answer: string;
@@ -41,7 +43,7 @@ const DOMAIN_SYNONYMS: Record<string, string[]> = {
   chunking: ["chunk", "chunks", "split", "splitting", "segment"],
 };
 
-function keywordMatchesAnswer(keyword: string, answerWords: string[]): boolean {
+export function keywordMatchesAnswer(keyword: string, answerWords: string[]): boolean {
   const kw = keyword.toLowerCase();
 
   for (const word of answerWords) {
@@ -153,38 +155,49 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
   const responseType = responseAnalysis?.responseType;
   const isHonestUnknown = responseType === "DOES_NOT_KNOW" || responseType === "DID_NOT_UNDERSTAND";
 
-  const conceptAccuracy = Math.min(
+  const depth = assessDepth(answer, topic);
+
+  const conceptualCoverage = Math.min(
     100,
-    Math.round(keywordRatio * 60 + lengthScore * 0.2 + (answer.length > 50 ? 20 : 0))
+    Math.round(keywordRatio * 50 + lengthScore * 0.2 + (answer.length > 50 ? 15 : 0))
   );
 
   const completeness = Math.min(
     100,
-    Math.round(keywordRatio * 50 + lengthScore * 0.3 + (keywordMatches >= 2 ? 20 : 0))
+    Math.round(keywordRatio * 35 + lengthScore * 0.2 + depth.structuralQuality * 0.25 + (keywordMatches >= 2 ? 15 : 0))
   );
 
-  const depth = Math.min(
+  const depthScore = Math.min(
     100,
     Math.round(
-      (difficulty / 5) * 30 +
-        (answer.length > 200 ? 30 : answer.length > 100 ? 20 : 10) +
-        keywordRatio * 40
+      depth.implementationSpecificity * 0.35 +
+        depth.tradeOffAwareness * 0.30 +
+        depth.technicalVocabulary * 0.20 +
+        keywordRatio * 15
     )
   );
+
+  const factualDepth = Math.min(30, (() => {
+    const sentences = answer.split(/[.!?]+/).filter(x => x.trim().length > 8).length;
+    const distinctTerms = new Set(answer.toLowerCase().split(/\W+/).filter(w => w.length > 3)).size;
+    let d = 0;
+    if (sentences >= 3) d += 8;
+    if (sentences >= 5) d += 7;
+    if (distinctTerms > 30) d += 8;
+    if (distinctTerms > 50) d += 7;
+    return d;
+  })());
 
   const reasoning = Math.min(
     100,
     Math.round(
-      (/\bbecause\b|\bsince\b|\btherefore\b|\bthus\b|\bso that\b/i.test(answer)
-        ? 40
-        : 15) +
-        (/\btrade.?off|\bpros?\b|\bcons?\b|\badvantage|\bdisadvantage/i.test(
-          answer
-        )
-          ? 25
-          : 0) +
-        (/\bif\b|\bwhen\b|\bunless\b|\bconsider/i.test(answer) ? 20 : 0) +
-        keywordRatio * 15
+      15 +
+        (/\bbecause\b|\bsince\b|\btherefore\b|\bthus\b|\bso that\b/i.test(answer) ? 18 : 0) +
+        (/\btrade.?off|\bpros?\b|\bcons?\b|\badvantage|\bdisadvantage/i.test(answer) ? 15 : 0) +
+        (/\bif\b|\bwhen\b|\bunless\b|\bconsider/i.test(answer) ? 10 : 0) +
+        factualDepth +
+        depth.tradeOffAwareness * 0.25 +
+        depth.implementationSpecificity * 0.15
     )
   );
   const problemSolving = reasoning;
@@ -194,8 +207,8 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     Math.round(
       (/\bi think\b|\bmaybe\b|\bnot sure\b|\bi guess\b/i.test(answer) ? -15 : 15) +
         (/\bdefinitely\b|\bclearly\b|\babsolutely\b/i.test(answer) ? 10 : 0) +
-        lengthScore * 0.5 +
-        40
+        lengthScore * 0.4 +
+        35
     )
   );
 
@@ -211,57 +224,75 @@ export function evaluateAnswer(params: EvaluateParams): EvaluationResult {
     )
   );
 
+  const modelAnswer = generateDomainModelAnswer(topic, { id: objectiveId, description: objective?.description ?? "", keywords }, answer);
+
   const overall = Math.round(
-    conceptAccuracy * 0.25 +
-      completeness * 0.2 +
-      depth * 0.2 +
-      problemSolving * 0.2 +
-      communication * 0.1 +
-      confidence * 0.05
+    conceptualCoverage * 0.30 +
+      depth.technicalVocabulary * 0.15 +
+      problemSolving * 0.15 +
+      completeness * 0.15 +
+      communication * 0.10 +
+      depth.structuralQuality * 0.10 +
+      depthScore * 0.05
   );
 
-  const isCorrect = overall >= 65 && conceptAccuracy >= 55;
-  const isPartial = !isCorrect && overall >= 40;
+  const isCorrect = overall >= 55 && conceptualCoverage >= 45;
+  const isPartial = !isCorrect && overall >= 35;
 
   const misconception = !isCorrect ? detectMisconception(answer, topic) : undefined;
 
   const objectiveDesc = objective?.description.toLowerCase() ?? "the core concept";
   const missingText = responseAnalysis?.missingConcepts.slice(0, 3).join(", ") ?? "the fundamentals";
+  const missingConcepts = findMissingConcepts(answer, keywords);
+  const missingConceptsText = missingConcepts.length > 0 ? missingConcepts.join(", ") : missingText;
 
   let feedback: string;
   if (isHonestUnknown) {
     feedback = `Candidate honestly acknowledged not knowing the concept. Strength: did not attempt to fabricate an answer. Gap: needs stronger understanding of ${objectiveDesc}. Recommendation: review the core concepts — ${keywords.slice(0, 4).join(", ")} — through a small hands-on exercise, then retry.`;
   } else if (responseType === "INCORRECT" && responseAnalysis?.misconceptions.length) {
     feedback = `Candidate gave an incorrect explanation with a misconception: ${responseAnalysis.misconceptions[0]}. Gap: needs correction on ${keywords.slice(0, 3).join(", ") || "the core concept"}. Recommendation: review the concept with a worked example before moving on.`;
-  } else if (overall >= 85) {
-    feedback = `Excellent response on ${objectiveDesc} — demonstrated strong understanding and clear communication.`;
   } else if (overall >= 70) {
-    feedback = `Good answer on ${objectiveDesc}. Solid grasp of the main ideas; could go deeper on trade-offs and concrete examples.`;
-  } else if (overall >= 50) {
-    feedback = `Partial understanding of ${objectiveDesc}. Strengths: ${responseAnalysis?.strengths.join(", ") || "some key concepts mentioned"}. Gap: explanation lacks completeness around ${missingText}. Recommendation: structure answers as concept → example → trade-offs.`;
-  } else if (overall >= 30) {
-    feedback = `Limited understanding of ${objectiveDesc}. Several core concepts were missed or unclear. Recommendation: revisit ${missingText} before moving on.`;
+    feedback = `Excellent response on ${objectiveDesc} — demonstrated strong understanding, clear communication, and technical depth.`;
+  } else if (overall >= 55) {
+    feedback = `Good answer on ${objectiveDesc}. Solid grasp of main ideas${
+      depth.tradeOffAwareness >= 50 ? " with good trade-off awareness" : ""
+    }. ${depth.implementationSpecificity < 40 ? "Could strengthen with more concrete implementation details." : ""}`;
+  } else if (overall >= 35) {
+    feedback = `Partial understanding of ${objectiveDesc}. Strengths: ${responseAnalysis?.strengths.join(", ") || "some key concepts mentioned"}. Areas to deepen: ${missingConceptsText}. ${
+      depth.structuralQuality < 40 ? "Try structuring your answer with clear sections." : ""
+    }`;
+  } else if (overall >= 20) {
+    feedback = `Limited understanding of ${objectiveDesc}. Key concepts were missed or unclear: ${missingConceptsText}. Recommendation: revisit these fundamentals before moving on.`;
   } else {
-    feedback = `Response did not adequately address ${objectiveDesc}. The core concepts — ${keywords.slice(0, 3).join(", ") || "the fundamentals"} — were missing. Recommendation: study the basics and try again.`;
+    feedback = `Response did not adequately address ${objectiveDesc}. The expected concepts — ${keywords.slice(0, 3).join(", ") || "the fundamentals"} — were missing. Recommendation: study the basics and try again.`;
   }
 
   return {
-    conceptAccuracy,
+    conceptAccuracy: conceptualCoverage,
     completeness,
-    depth,
+    depth: depthScore,
     reasoning,
     communication,
     confidence,
     codeQuality,
+    implementationSpecificity: depth.implementationSpecificity,
+    tradeOffAwareness: depth.tradeOffAwareness,
+    technicalVocabulary: depth.technicalVocabulary,
+    structuralQuality: depth.structuralQuality,
     overall,
     scoreBreakdown: {
-      technicalAccuracy: conceptAccuracy,
+      technicalAccuracy: conceptualCoverage,
       communicationClarity: communication,
       completeness,
       problemSolving,
       codeQuality,
+      implementationSpecificity: depth.implementationSpecificity,
+      tradeOffAwareness: depth.tradeOffAwareness,
+      technicalVocabulary: depth.technicalVocabulary,
+      structuralQuality: depth.structuralQuality,
     },
     feedback,
+    modelAnswer: formatModelAnswer(modelAnswer),
     isCorrect,
     isPartial,
     misconception,

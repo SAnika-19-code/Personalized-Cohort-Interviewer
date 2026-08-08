@@ -48,6 +48,10 @@ export function WrapUpScreen({ report, onStartNew }: WrapUpScreenProps) {
     ["Completeness", report.scoreBreakdown.completeness],
     ["Problem Solving", report.scoreBreakdown.problemSolving],
     ["Code Quality", report.scoreBreakdown.codeQuality],
+    ["Implementation Specificity", report.scoreBreakdown.implementationSpecificity],
+    ["Trade-off Awareness", report.scoreBreakdown.tradeOffAwareness],
+    ["Technical Vocabulary", report.scoreBreakdown.technicalVocabulary],
+    ["Structural Quality", report.scoreBreakdown.structuralQuality],
   ] as const;
 
   return (

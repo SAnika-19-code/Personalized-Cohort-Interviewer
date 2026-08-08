@@ -23,7 +23,8 @@ import {
   generateOpeningMessage,
   generateClosingMessage,
 } from "@/lib/questionGenerator";
-import { evaluateAnswer, deriveStrengthsAndWeaknesses } from "@/lib/evaluator";
+import { evaluateAnswer, deriveStrengthsAndWeaknesses, keywordMatchesAnswer } from "@/lib/evaluator";
+import { formatModelAnswer, generateDomainModelAnswer } from "@/lib/evaluator/modelAnswer";
 import { analyzeCandidateResponse } from "@/lib/interview/responseAnalyzer";
 import { determineInterviewStrategy } from "@/lib/interview/strategyEngine";
 import type { InterviewStrategy } from "@/lib/interview/strategyEngine";
@@ -68,6 +69,17 @@ function styleToDifficulty(
 
 function averageBreakdown(evaluations: EvaluationResult[]): ScoreBreakdown {
   const count = Math.max(evaluations.length, 1);
+  const zero: ScoreBreakdown = {
+    technicalAccuracy: 0,
+    communicationClarity: 0,
+    completeness: 0,
+    problemSolving: 0,
+    codeQuality: 0,
+    implementationSpecificity: 0,
+    tradeOffAwareness: 0,
+    technicalVocabulary: 0,
+    structuralQuality: 0,
+  };
   const totals = evaluations.reduce<ScoreBreakdown>(
     (acc, evaluation) => ({
       technicalAccuracy:
@@ -77,14 +89,16 @@ function averageBreakdown(evaluations: EvaluationResult[]): ScoreBreakdown {
       completeness: acc.completeness + evaluation.scoreBreakdown.completeness,
       problemSolving: acc.problemSolving + evaluation.scoreBreakdown.problemSolving,
       codeQuality: acc.codeQuality + evaluation.scoreBreakdown.codeQuality,
+      implementationSpecificity:
+        acc.implementationSpecificity + (evaluation.scoreBreakdown.implementationSpecificity ?? 0),
+      tradeOffAwareness:
+        acc.tradeOffAwareness + (evaluation.scoreBreakdown.tradeOffAwareness ?? 0),
+      technicalVocabulary:
+        acc.technicalVocabulary + (evaluation.scoreBreakdown.technicalVocabulary ?? 0),
+      structuralQuality:
+        acc.structuralQuality + (evaluation.scoreBreakdown.structuralQuality ?? 0),
     }),
-    {
-      technicalAccuracy: 0,
-      communicationClarity: 0,
-      completeness: 0,
-      problemSolving: 0,
-      codeQuality: 0,
-    }
+    zero
   );
 
   return {
@@ -93,43 +107,52 @@ function averageBreakdown(evaluations: EvaluationResult[]): ScoreBreakdown {
     completeness: Math.round(totals.completeness / count),
     problemSolving: Math.round(totals.problemSolving / count),
     codeQuality: Math.round(totals.codeQuality / count),
+    implementationSpecificity: Math.round(totals.implementationSpecificity / count),
+    tradeOffAwareness: Math.round(totals.tradeOffAwareness / count),
+    technicalVocabulary: Math.round(totals.technicalVocabulary / count),
+    structuralQuality: Math.round(totals.structuralQuality / count),
   };
 }
 
-function generateModelAnswer(
+const EMPTY_SCORE_BREAKDOWN: ScoreBreakdown = {
+  technicalAccuracy: 0,
+  communicationClarity: 0,
+  completeness: 0,
+  problemSolving: 0,
+  codeQuality: 0,
+  implementationSpecificity: 0,
+  tradeOffAwareness: 0,
+  technicalVocabulary: 0,
+  structuralQuality: 0,
+};
+
+export function generateModelAnswer(
   curriculum: Curriculum,
   topicId: string,
   objectiveId: string,
   candidateAnswer: string
 ): string {
   const topicData = getTopicById(curriculum, topicId);
-  const objective =
-    topicData?.topic.learningObjectives.find((o) => o.id === objectiveId) ??
-    topicData?.topic.learningObjectives[0];
-  const title = topicData?.topic.title ?? "the topic";
-  const tools = topicData?.topic.tools?.slice(0, 3).join(", ") ?? "the relevant tools";
-  const keywords = objective?.keywords?.slice(0, 5) ?? [];
-  const description = objective?.description ?? "the relevant curriculum objective";
-
-  const keywordList = keywords.slice(0, 4);
-  const primaryKeyword = keywordList[0] ?? "the core concept";
-  const secondaryKeyword = keywordList[1] ?? "practical application";
-
-  const parts: string[] = [];
-  parts.push(`**${title}** — ${description}.`);
-  parts.push(
-    `Example: "To ${description.toLowerCase()}, I would start by understanding ${primaryKeyword} and how it applies to ${title.toLowerCase()}. Using ${tools}, I would build a workflow that handles ${secondaryKeyword} — for instance, processing real inputs, applying the transformation, and validating the output. The key trade-off is between [speed/accuracy/cost] depending on the scale, and I would verify the approach by testing against known benchmarks and checking edge cases in production."`
-  );
-
-  const missed = keywords.filter(
-    (keyword) => !candidateAnswer.toLowerCase().includes(keyword.toLowerCase())
-  );
-  if (missed.length) {
-    parts.push(`Concepts a strong answer should reference: ${missed.join(", ")}.`);
+  if (!topicData) {
+    return "**General** — Tell me about your experience with the topics covered in this curriculum.";
   }
+  const objective =
+    topicData.topic.learningObjectives.find((o) => o.id === objectiveId) ??
+    topicData.topic.learningObjectives[0];
 
-  return parts.join("\n\n");
+  const model = generateDomainModelAnswer(
+    topicData.topic,
+    {
+      id: objectiveId,
+      description: objective?.description ?? "",
+      keywords: objective?.keywords,
+    },
+    candidateAnswer
+  );
+
+  return formatModelAnswer(model);
 }
+
 
 export function createSession(
   candidateProfile: CandidateProfile,
@@ -287,14 +310,13 @@ export async function processAnswer(
       confidence: 50,
       overall: 50,
       codeQuality: 60,
-      scoreBreakdown: {
-        technicalAccuracy: 50,
-        communicationClarity: 50,
-        completeness: 50,
-        problemSolving: 50,
-        codeQuality: 60,
-      },
+      implementationSpecificity: 50,
+      tradeOffAwareness: 50,
+      technicalVocabulary: 50,
+      structuralQuality: 50,
+      scoreBreakdown: { ...EMPTY_SCORE_BREAKDOWN },
       feedback: "General response evaluated.",
+      modelAnswer: "",
       isCorrect: true,
       isPartial: false,
       objectivesAssessed: ["general"],

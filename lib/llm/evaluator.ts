@@ -16,6 +16,10 @@ const EVALUATION_SCHEMA = {
     communication: { type: "integer", minimum: 0, maximum: 100 },
     confidence: { type: "integer", minimum: 0, maximum: 100 },
     codeQuality: { type: "integer", minimum: 0, maximum: 100 },
+    implementationSpecificity: { type: "integer", minimum: 0, maximum: 100 },
+    tradeOffAwareness: { type: "integer", minimum: 0, maximum: 100 },
+    technicalVocabulary: { type: "integer", minimum: 0, maximum: 100 },
+    structuralQuality: { type: "integer", minimum: 0, maximum: 100 },
     overall: { type: "integer", minimum: 0, maximum: 100 },
     isCorrect: { type: "boolean" },
     isPartial: { type: "boolean" },
@@ -30,6 +34,10 @@ const EVALUATION_SCHEMA = {
     "communication",
     "confidence",
     "codeQuality",
+    "implementationSpecificity",
+    "tradeOffAwareness",
+    "technicalVocabulary",
+    "structuralQuality",
     "overall",
     "isCorrect",
     "isPartial",
@@ -50,10 +58,14 @@ EVALUATION DIMENSIONS (0-100 each):
 5. COMMUNICATION: Structure, clarity, examples, analogies, code snippets, logical flow.
 6. CONFIDENCE: Certainty vs. hedging. "I think" vs. "This is because..." (but overconfidence without substance is penalized).
 7. CODE QUALITY: If code is present - correctness, best practices, error handling, readability. If no code expected, score based on pseudo-code/algorithm clarity.
+8. IMPLEMENTATION SPECIFICITY: Does the answer describe concrete steps, commands, configurations, or code patterns — not just vague concepts?
+9. TRADE-OFF AWARENESS: Does the candidate discuss trade-offs, pros/cons, alternatives, or when to choose one approach over another?
+10. TECHNICAL VOCABULARY: Does the answer use domain-specific terminology appropriate to the topic?
+11. STRUCTURAL QUALITY: Is the answer well-organized with clear sections, logical flow, and coherent structure?
 
-OVERALL: Weighted composite (Concept Accuracy 25%, Completeness 20%, Depth 20%, Reasoning 20%, Communication 10%, Confidence 5%).
+OVERALL: Weighted composite (Concept Accuracy 15%, Completeness 10%, Depth 15%, Reasoning 10%, Communication 10%, Confidence 5%, Implementation Specificity 15%, Trade-off Awareness 10%, Technical Vocabulary 5%, Structural Quality 5%).
 
-ISCORRECT: Overall >= 65 AND Concept Accuracy >= 55
+ISCORRECT: Overall >= 65 AND Concept Accuracy >= 45
 ISPARTIAL: NOT IsCorrect AND Overall >= 40
 
 MISCONCEPTION: If the answer reveals a fundamental misunderstanding, describe it specifically for a follow-up probe. Null if none.
@@ -99,6 +111,10 @@ export async function evaluateAnswerLLM(params: EvaluateParams): Promise<Evaluat
     communication: number;
     confidence: number;
     codeQuality: number;
+    implementationSpecificity: number;
+    tradeOffAwareness: number;
+    technicalVocabulary: number;
+    structuralQuality: number;
     overall: number;
     isCorrect: boolean;
     isPartial: boolean;
@@ -112,6 +128,10 @@ export async function evaluateAnswerLLM(params: EvaluateParams): Promise<Evaluat
     completeness: result.completeness,
     problemSolving: result.reasoning,
     codeQuality: result.codeQuality,
+    implementationSpecificity: result.implementationSpecificity ?? 50,
+    tradeOffAwareness: result.tradeOffAwareness ?? 50,
+    technicalVocabulary: result.technicalVocabulary ?? 50,
+    structuralQuality: result.structuralQuality ?? 50,
   };
 
   return {
@@ -122,9 +142,14 @@ export async function evaluateAnswerLLM(params: EvaluateParams): Promise<Evaluat
     communication: result.communication,
     confidence: result.confidence,
     codeQuality: result.codeQuality,
+    implementationSpecificity: result.implementationSpecificity ?? 50,
+    tradeOffAwareness: result.tradeOffAwareness ?? 50,
+    technicalVocabulary: result.technicalVocabulary ?? 50,
+    structuralQuality: result.structuralQuality ?? 50,
     overall: result.overall,
     scoreBreakdown,
     feedback: result.feedback,
+    modelAnswer: "",
     isCorrect: result.isCorrect,
     isPartial: result.isPartial,
     misconception: result.misconception ?? undefined,
