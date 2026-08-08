@@ -343,3 +343,29 @@ Welcome judges! This file covers the ninth and final technical iteration of our 
 
 ---
 
+# 🤖 Vibe Coding Manifest: AI Technical Interviewer (Model Answer Refinement & Semantic Scoring Upgrade)
+
+Welcome judges! This file covers the tenth iteration of our "vibe coding" workflow, focusing on eradicating generic boilerplate model answers and replacing them with rigorous, domain-specific technical references. This upgrade ensures the evaluation engine scores candidates against authentic engineering standards rather than keyword-stuffed templates.
+
+---
+
+## 16. Domain-Specific Model Answer Generation & Scoring Alignment
+*Prompts and architectural updates to generate deep, realistic technical model answers and eliminate circular scoring distortion.*
+
+> **Prompt:**
+> ```text
+> Fix the model-answer generation engine to eliminate generic, template-driven boilerplate (e.g., shoehorning random keyword lists into "Using Pandas, SQLite, SQL, I would build a workflow...") and replace it with authentic, domain-specific technical expectations:
+> 
+> 1. Contextual Model Answer Architecture (lib/interview/evaluator.ts or modelAnswer generator):
+>    - Remove circular keyword-injection templates.
+>    - Replace them with a synthesis engine that details concrete engineering steps appropriate to the specific topic (e.g., defining entities, generating synthetic schemas with foreign-key preservation, enforcing statistical realism, injecting edge cases, and handling privacy/compliance).
+> 
+> 2. Evaluation Engine Alignment:
+>    - Ensure the evaluation engine compares candidate responses against these authentic technical model answers rather than weak, generic reference strings.
+>    - Eliminate scoring distortion by grading candidates on true conceptual depth, trade-off analysis, and implementation mechanics rather than superficial keyword overlap.
+> ```
+
+---
+
+---
+
